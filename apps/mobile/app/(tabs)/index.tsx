@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform,
-  Alert, ScrollView, Modal, Pressable,
+  Alert, ScrollView, Modal, Pressable, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -45,6 +45,10 @@ export default function DrawScreen() {
   const [currentPage, setCurrentPage] = useState(0);
   const [showPagePanel, setShowPagePanel] = useState(false);
   const [colorTab, setColorTab] = useState<'standard' | 'neon' | 'extended'>('standard');
+  const [shapeMode, setShapeMode] = useState(false);
+  const [recentColors, setRecentColors] = useState<string[]>([]);
+  const [hexInput, setHexInput] = useState('');
+  const [localZoom, setLocalZoom] = useState(1);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const botPad = Platform.OS === 'web' ? 34 + 84 : insets.bottom + 60;
@@ -96,8 +100,21 @@ export default function DrawScreen() {
 
   const selectColor = (color: string) => {
     setPenColor(color);
+    setRecentColors(prev => {
+      const filtered = prev.filter(c => c !== color);
+      return [color, ...filtered].slice(0, 8);
+    });
+    setHexInput('');
     setShowColorPanel(false);
     haptic.light();
+  };
+
+  const applyHexColor = () => {
+    const hex = hexInput.trim();
+    const valid = /^#?[0-9A-Fa-f]{6}$/.test(hex);
+    if (!valid) return;
+    const color = hex.startsWith('#') ? hex : `#${hex}`;
+    selectColor(color);
   };
 
   const s = styles(colors);
@@ -123,6 +140,15 @@ export default function DrawScreen() {
           <View style={s.headerRight}>
             <TouchableOpacity style={[s.headerBtn, keepAwake && { backgroundColor: colors.primarySoft }]} onPress={toggleKeepAwake}>
               <MaterialCommunityIcons name={keepAwake ? 'eye' : 'eye-off-outline'} size={18} color={keepAwake ? colors.primary : colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.headerBtn} onPress={() => setLocalZoom(z => Math.max(0.5, parseFloat((z - 0.25).toFixed(2))))}>
+              <MaterialCommunityIcons name="magnify-minus-outline" size={18} color={localZoom > 0.5 ? colors.text : colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.headerBtn, { paddingHorizontal: 6, minWidth: 44 }]} onPress={() => setLocalZoom(1)}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>{Math.round(localZoom * 100)}%</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.headerBtn} onPress={() => setLocalZoom(z => Math.min(3, parseFloat((z + 0.25).toFixed(2))))}>
+              <MaterialCommunityIcons name="magnify-plus-outline" size={18} color={localZoom < 3 ? colors.text : colors.textMuted} />
             </TouchableOpacity>
             <TouchableOpacity style={s.headerBtn} onPress={() => setIsFullscreen(true)}>
               <MaterialCommunityIcons name="fullscreen" size={18} color={colors.text} />
@@ -191,8 +217,14 @@ export default function DrawScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Right: template, page, clear */}
+          {/* Right: shape mode, template, page, clear */}
           <View style={s.tbRight}>
+            <TouchableOpacity
+              style={[s.tbBtn, shapeMode && { backgroundColor: colors.primarySoft }]}
+              onPress={() => { setShapeMode(v => !v); if (shapeMode) selectTool('ballpoint'); haptic.select(); }}
+            >
+              <MaterialCommunityIcons name="shape-outline" size={20} color={shapeMode ? colors.primary : colors.text} />
+            </TouchableOpacity>
             <TouchableOpacity style={s.tbBtn} onPress={() => { setShowTemplatePanel(true); haptic.light(); }}>
               <MaterialCommunityIcons name="layers-outline" size={20} color={colors.text} />
             </TouchableOpacity>
@@ -206,6 +238,28 @@ export default function DrawScreen() {
             )}
           </View>
         </View>
+      )}
+
+      {/* Shape Tools Row */}
+      {shapeMode && !isFullscreen && (
+        <Animated.View entering={SlideInDown.duration(180)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border }}>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted, marginRight: 4 }}>Shapes:</Text>
+          {([
+            { tool: 'line-shape', icon: 'minus', label: 'Line' },
+            { tool: 'circle-shape', icon: 'circle-outline', label: 'Circle' },
+            { tool: 'rect-shape', icon: 'rectangle-outline', label: 'Rect' },
+            { tool: 'arrow-shape', icon: 'arrow-right-thin', label: 'Arrow' },
+          ] as const).map(({ tool, icon, label }) => (
+            <TouchableOpacity
+              key={tool}
+              style={{ flex: 1, alignItems: 'center', gap: 3, paddingVertical: 8, borderRadius: 12, backgroundColor: activeTool === tool ? colors.primarySoft : colors.inputBg, borderWidth: activeTool === tool ? 2 : 0, borderColor: colors.primary }}
+              onPress={() => { selectTool(tool as any); }}
+            >
+              <MaterialCommunityIcons name={icon as any} size={22} color={activeTool === tool ? colors.primary : colors.text} />
+              <Text style={{ fontSize: 10, fontWeight: '700', color: activeTool === tool ? colors.primary : colors.textMuted }}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </Animated.View>
       )}
 
       {/* Size Panel */}
@@ -304,7 +358,19 @@ export default function DrawScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: colorTab === 'extended' ? 8 : 10, marginBottom: 8 }}>
+            {recentColors.length > 0 && (
+              <View style={{ marginBottom: 14 }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Recent</Text>
+                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                  {recentColors.map(c => (
+                    <TouchableOpacity key={c} style={[{ width: 32, height: 32, borderRadius: 16, backgroundColor: c, alignItems: 'center', justifyContent: 'center' }, penColor === c && { borderWidth: 3, borderColor: colors.primary }]} onPress={() => selectColor(c)}>
+                      {penColor === c && <MaterialCommunityIcons name="check" size={12} color={c === '#ffffff' || c === '#eab308' ? '#000' : '#fff'} />}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: colorTab === 'extended' ? 8 : 10, marginBottom: 14 }}>
               {colorsByTab.map(c => (
                 <TouchableOpacity
                   key={c}
@@ -321,6 +387,24 @@ export default function DrawScreen() {
                   {penColor === c && <MaterialCommunityIcons name="check" size={13} color={c === '#ffffff' || c === '#eab308' || c === '#fef08a' ? '#000' : '#fff'} />}
                 </TouchableOpacity>
               ))}
+            </View>
+            {/* Hex Color Input */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 4 }}>
+              <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: /^#?[0-9A-Fa-f]{6}$/.test(hexInput) ? (hexInput.startsWith('#') ? hexInput : `#${hexInput}`) : penColor, borderWidth: 1, borderColor: colors.border }} />
+              <TextInput
+                style={{ flex: 1, backgroundColor: colors.inputBg, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, color: colors.text, fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace', borderWidth: 1, borderColor: colors.border }}
+                placeholder="#RRGGBB"
+                placeholderTextColor={colors.textMuted}
+                value={hexInput}
+                onChangeText={setHexInput}
+                autoCapitalize="characters"
+                maxLength={7}
+                returnKeyType="done"
+                onSubmitEditing={applyHexColor}
+              />
+              <TouchableOpacity onPress={applyHexColor} style={{ backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 9 }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>Apply</Text>
+              </TouchableOpacity>
             </View>
           </Pressable>
         </Pressable>

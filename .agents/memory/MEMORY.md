@@ -6,3 +6,6 @@
 - [Import/export architecture](import-export.md) — use `importBackup(BackupBundle)` from NotesContext (not exportImport.ts helpers) for full backup import; exportBackup() returns BackupBundle with strokesMap
 - [Page backgrounds](page-backgrounds.md) — PAGE_BACKGROUNDS array has 20 named colors; applied via getPageBg()/getPageTextColor() helpers in [id].tsx; picker opens from format bar palette icon or more menu
 - [Routing canvas tab](routing-canvas.md) — canvas tab is app/(tabs)/index.tsx; root app/index.tsx redirects to /(tabs)/home; use router.navigate('/') not router.push('/(tabs)/') for canvas navigation
+- [Callout block ordering](callout-ordering.md) — callout checks (💡⚠️ℹ️✅❌📝🔥🚨) MUST come before generic blockquote check in renderMarkdownLine; FormatCategory type now includes 'callout'
+- [Shape tools architecture](shape-tools.md) — shape tool types in PenToolType; DrawingCanvas keeps only [start, current] points for shape tools; PEN_TOOLS.push() appends shape entries after array literal
+- [Study quiz mode](study-quiz.md) — study.tsx has QuizMode type ('flashcard'|'multiChoice'); Flashcard has optional hint field; MC choices generated in useMemo keyed on currentCard.id + quizMode

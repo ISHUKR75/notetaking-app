@@ -1,9 +1,9 @@
 import React, { useRef, useMemo } from 'react';
 import { View, StyleSheet, PanResponder } from 'react-native';
-import Svg, { Path, Circle, Line, G, Rect } from 'react-native-svg';
+import Svg, { Path, Circle, Line, G, Rect, Ellipse } from 'react-native-svg';
 import { useDrawing, Stroke, StrokePoint } from '../context/DrawingContext';
 import { useTheme } from '../context/ThemeContext';
-import { PEN_TOOLS, PenToolType } from '../constants/penTools';
+import { PenToolType } from '../constants/penTools';
 import { generateId } from '../utils/noteUtils';
 
 interface DrawingCanvasProps {
@@ -41,18 +41,18 @@ function variableWidthPath(points: StrokePoint[], baseW: number, tool: PenToolTy
       const dt = Math.max(1, p.timestamp - prev.timestamp);
       const speed = Math.hypot(p.x - prev.x, p.y - prev.y) / dt;
       if (tool === 'fountain' || tool === 'ink') {
-        w = baseW * Math.max(0.3, 1.4 - speed * 0.05);
+        w = baseW * Math.max(0.25, 1.5 - speed * 0.06);
       } else if (tool === 'brush') {
-        w = baseW * (0.5 + p.pressure * 0.5);
+        w = baseW * (0.4 + p.pressure * 0.6);
       }
     }
     if (tool === 'fountain' || tool === 'ink') {
-      const sp = idx / Math.min(8, n * 0.2);
-      const ep = (n - 1 - idx) / Math.min(8, n * 0.2);
-      if (sp < 1) w *= (0.15 + sp * 0.85);
-      if (ep < 1) w *= (0.15 + ep * 0.85);
+      const sp = idx / Math.min(10, n * 0.2);
+      const ep = (n - 1 - idx) / Math.min(10, n * 0.2);
+      if (sp < 1) w *= (0.08 + sp * 0.92);
+      if (ep < 1) w *= (0.08 + ep * 0.92);
     }
-    return Math.max(0.4, w);
+    return Math.max(0.3, w);
   });
 
   const left: { x: number; y: number }[] = [];
@@ -91,7 +91,7 @@ function calligraphyPath(points: StrokePoint[], width: number): string {
     const p2 = points[i + 1];
     const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
     const nib = angle + Math.PI / 4;
-    const hw = (width * (0.4 + 0.6 * Math.abs(Math.sin(angle)))) / 2;
+    const hw = (width * (0.35 + 0.65 * Math.abs(Math.sin(angle)))) / 2;
     const dx = Math.cos(nib) * hw; const dy = Math.sin(nib) * hw;
     return `M ${(p1.x+dx).toFixed(1)} ${(p1.y+dy).toFixed(1)} L ${(p2.x+dx).toFixed(1)} ${(p2.y+dy).toFixed(1)} L ${(p2.x-dx).toFixed(1)} ${(p2.y-dy).toFixed(1)} L ${(p1.x-dx).toFixed(1)} ${(p1.y-dy).toFixed(1)} Z`;
   }).join(' ');
@@ -107,6 +107,18 @@ function pixelPath(points: StrokePoint[], width: number): string {
     if (!seen.has(key)) { seen.add(key); acc += `M ${px} ${py} h ${size} v ${size} h ${-size} Z `; }
     return acc;
   }, '');
+}
+
+// ─── Arrow helper ─────────────────────────────────────────────────────────────
+
+function arrowHeadPath(x1: number, y1: number, x2: number, y2: number, size: number): string {
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const spread = Math.PI / 5;
+  const ax1 = x2 - size * Math.cos(angle - spread);
+  const ay1 = y2 - size * Math.sin(angle - spread);
+  const ax2 = x2 - size * Math.cos(angle + spread);
+  const ay2 = y2 - size * Math.sin(angle + spread);
+  return `M ${ax1.toFixed(1)} ${ay1.toFixed(1)} L ${x2.toFixed(1)} ${y2.toFixed(1)} L ${ax2.toFixed(1)} ${ay2.toFixed(1)}`;
 }
 
 // ─── Template Background ──────────────────────────────────────────────────────
@@ -232,82 +244,163 @@ function StrokeRenderer({ stroke }: { stroke: Stroke }) {
   const { tool, color, width, opacity, points } = stroke;
   if (!points.length) return null;
 
+  const start = points[0];
+  const end = points[points.length - 1];
+
+  // ── Shape tools ──────────────────────────────────────────────────────────
+  if (tool === 'line-shape') {
+    return (
+      <Line
+        x1={start.x} y1={start.y} x2={end.x} y2={end.y}
+        stroke={color} strokeWidth={width} strokeLinecap="round" opacity={opacity}
+      />
+    );
+  }
+  if (tool === 'arrow-shape') {
+    const headSize = Math.max(width * 5, 14);
+    return (
+      <G opacity={opacity}>
+        <Line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke={color} strokeWidth={width} strokeLinecap="round" />
+        <Path d={arrowHeadPath(start.x, start.y, end.x, end.y, headSize)} fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" />
+      </G>
+    );
+  }
+  if (tool === 'circle-shape') {
+    const cx = (start.x + end.x) / 2;
+    const cy = (start.y + end.y) / 2;
+    const rx = Math.max(1, Math.abs(end.x - start.x) / 2);
+    const ry = Math.max(1, Math.abs(end.y - start.y) / 2);
+    return <Ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke={color} strokeWidth={width} opacity={opacity} />;
+  }
+  if (tool === 'rect-shape') {
+    const x = Math.min(start.x, end.x);
+    const y = Math.min(start.y, end.y);
+    const w = Math.abs(end.x - start.x);
+    const h = Math.abs(end.y - start.y);
+    return <Rect x={x} y={y} width={Math.max(1, w)} height={Math.max(1, h)} fill="none" stroke={color} strokeWidth={width} rx={4} opacity={opacity} />;
+  }
+
+  // ── Eraser ───────────────────────────────────────────────────────────────
   if (tool === 'eraser') {
     return <Path d={smoothPath(points)} fill="none" stroke="white" strokeWidth={width * 2.5} strokeLinecap="round" strokeLinejoin="round" opacity={1} />;
   }
+
+  // ── Neon glow — 6-layer simulation ────────────────────────────────────────
   if (tool === 'neon') {
     const d = smoothPath(points);
     return (
       <G>
-        <Path d={d} fill="none" stroke={color} strokeWidth={width * 4} strokeLinecap="round" strokeLinejoin="round" opacity={0.12} />
-        <Path d={d} fill="none" stroke={color} strokeWidth={width * 2.2} strokeLinecap="round" strokeLinejoin="round" opacity={0.22} />
-        <Path d={d} fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" opacity={opacity} />
-        <Path d={d} fill="none" stroke="white" strokeWidth={width * 0.25} strokeLinecap="round" strokeLinejoin="round" opacity={0.65} />
+        <Path d={d} fill="none" stroke={color} strokeWidth={width * 8}   strokeLinecap="round" strokeLinejoin="round" opacity={0.04} />
+        <Path d={d} fill="none" stroke={color} strokeWidth={width * 5.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.08} />
+        <Path d={d} fill="none" stroke={color} strokeWidth={width * 3.8} strokeLinecap="round" strokeLinejoin="round" opacity={0.14} />
+        <Path d={d} fill="none" stroke={color} strokeWidth={width * 2.4} strokeLinecap="round" strokeLinejoin="round" opacity={0.22} />
+        <Path d={d} fill="none" stroke={color} strokeWidth={width * 1.2} strokeLinecap="round" strokeLinejoin="round" opacity={opacity * 0.9} />
+        <Path d={d} fill="none" stroke="#ffffff"strokeWidth={width * 0.3} strokeLinecap="round" strokeLinejoin="round" opacity={0.7} />
       </G>
     );
   }
+
+  // ── Watercolor — organic bloom ────────────────────────────────────────────
   if (tool === 'watercolor') {
     const d = smoothPath(points);
+    const offsets = [
+      { scale: 2.2, op: 0.28, dx: -1, dy: 1 },
+      { scale: 1.7, op: 0.36, dx: 1,  dy: -1 },
+      { scale: 1.3, op: 0.44, dx: -0.5, dy: 0 },
+      { scale: 0.9, op: 0.55, dx: 0.5, dy: 0.5 },
+      { scale: 0.5, op: 0.65, dx: 0,  dy: 0 },
+    ];
     return (
       <G>
-        <Path d={d} fill="none" stroke={color} strokeWidth={width * 1.8} strokeLinecap="round" strokeLinejoin="round" opacity={opacity * 0.35} />
-        <Path d={d} fill="none" stroke={color} strokeWidth={width * 1.1} strokeLinecap="round" strokeLinejoin="round" opacity={opacity * 0.55} />
-        <Path d={d} fill="none" stroke={color} strokeWidth={width * 0.5} strokeLinecap="round" strokeLinejoin="round" opacity={opacity * 0.75} />
-      </G>
-    );
-  }
-  if (tool === 'airbrush') {
-    const d = smoothPath(points);
-    return (
-      <G>
-        <Path d={d} fill="none" stroke={color} strokeWidth={width * 2.5} strokeLinecap="round" strokeLinejoin="round" opacity={opacity * 0.15} />
-        <Path d={d} fill="none" stroke={color} strokeWidth={width * 1.5} strokeLinecap="round" strokeLinejoin="round" opacity={opacity * 0.25} />
-        <Path d={d} fill="none" stroke={color} strokeWidth={width * 0.7} strokeLinecap="round" strokeLinejoin="round" opacity={opacity * 0.5} />
-      </G>
-    );
-  }
-  if (tool === 'highlighter' || tool === 'marker') {
-    return <Path d={smoothPath(points)} fill="none" stroke={color} strokeWidth={width} strokeLinecap={tool === 'highlighter' ? 'square' : 'round'} strokeLinejoin="round" opacity={opacity} />;
-  }
-  if (tool === 'chalk') {
-    const d = smoothPath(points);
-    return (
-      <G opacity={opacity}>
-        <Path d={d} fill="none" stroke={color} strokeWidth={width * 1.1} strokeLinecap="round" strokeLinejoin="round" opacity={0.35} strokeDasharray="3,2" />
-        <Path d={d} fill="none" stroke={color} strokeWidth={width * 0.6} strokeLinecap="round" strokeLinejoin="round" opacity={0.75} />
-        <Path d={d} fill="none" stroke="white" strokeWidth={width * 0.12} strokeLinecap="round" strokeLinejoin="round" opacity={0.3} />
-      </G>
-    );
-  }
-  if (tool === 'crayon') {
-    const offsets = [-0.4, -0.15, 0.15, 0.4];
-    return (
-      <G opacity={opacity}>
-        {offsets.map((off, i) => {
-          const shifted = points.map(p => ({ ...p, x: p.x + off * width, y: p.y + off * 0.3 * width }));
-          return <Path key={i} d={smoothPath(shifted)} fill="none" stroke={color} strokeWidth={width * 0.45} strokeLinecap="round" strokeLinejoin="round" opacity={0.55 + i * 0.08} />;
+        {offsets.map(({ scale, op, dx, dy }, i) => {
+          const shifted = points.map(p => ({ ...p, x: p.x + dx, y: p.y + dy }));
+          return <Path key={i} d={smoothPath(shifted)} fill="none" stroke={color} strokeWidth={width * scale} strokeLinecap="round" strokeLinejoin="round" opacity={opacity * op} />;
         })}
       </G>
     );
   }
-  if (tool === 'pencil') {
+
+  // ── Airbrush — radial fade ────────────────────────────────────────────────
+  if (tool === 'airbrush') {
     const d = smoothPath(points);
     return (
-      <G opacity={opacity}>
-        <Path d={d} fill="none" stroke={color} strokeWidth={width * 1.3} strokeLinecap="round" strokeLinejoin="round" opacity={0.28} strokeDasharray="4,1" />
-        <Path d={d} fill="none" stroke={color} strokeWidth={width * 0.6} strokeLinecap="round" strokeLinejoin="round" opacity={0.8} />
+      <G>
+        <Path d={d} fill="none" stroke={color} strokeWidth={width * 3.0} strokeLinecap="round" strokeLinejoin="round" opacity={opacity * 0.08} />
+        <Path d={d} fill="none" stroke={color} strokeWidth={width * 2.2} strokeLinecap="round" strokeLinejoin="round" opacity={opacity * 0.14} />
+        <Path d={d} fill="none" stroke={color} strokeWidth={width * 1.5} strokeLinecap="round" strokeLinejoin="round" opacity={opacity * 0.22} />
+        <Path d={d} fill="none" stroke={color} strokeWidth={width * 0.9} strokeLinecap="round" strokeLinejoin="round" opacity={opacity * 0.38} />
+        <Path d={d} fill="none" stroke={color} strokeWidth={width * 0.4} strokeLinecap="round" strokeLinejoin="round" opacity={opacity * 0.55} />
       </G>
     );
   }
+
+  // ── Highlighter / Marker ──────────────────────────────────────────────────
+  if (tool === 'highlighter' || tool === 'marker') {
+    return <Path d={smoothPath(points)} fill="none" stroke={color} strokeWidth={width} strokeLinecap={tool === 'highlighter' ? 'square' : 'round'} strokeLinejoin="round" opacity={opacity} />;
+  }
+
+  // ── Chalk — fragmented dust texture ──────────────────────────────────────
+  if (tool === 'chalk') {
+    const d = smoothPath(points);
+    const dust = points.map(p => ({ ...p, x: p.x + (Math.random() - 0.5) * width * 0.6, y: p.y + (Math.random() - 0.5) * width * 0.4 }));
+    return (
+      <G opacity={opacity}>
+        <Path d={smoothPath(dust)} fill="none" stroke={color} strokeWidth={width * 0.8} strokeLinecap="round" strokeLinejoin="round" opacity={0.28} strokeDasharray="2,3" />
+        <Path d={d} fill="none" stroke={color} strokeWidth={width * 1.2} strokeLinecap="round" strokeLinejoin="round" opacity={0.22} strokeDasharray="4,2" />
+        <Path d={d} fill="none" stroke={color} strokeWidth={width * 0.7} strokeLinecap="round" strokeLinejoin="round" opacity={0.72} />
+        <Path d={d} fill="none" stroke="white" strokeWidth={width * 0.1} strokeLinecap="round" strokeLinejoin="round" opacity={0.25} strokeDasharray="5,6" />
+      </G>
+    );
+  }
+
+  // ── Crayon — wax texture with offset layers ───────────────────────────────
+  if (tool === 'crayon') {
+    const offsets = [-0.5, -0.25, 0, 0.25, 0.5, 0.75];
+    return (
+      <G opacity={opacity}>
+        {offsets.map((off, i) => {
+          const shifted = points.map(p => ({
+            ...p,
+            x: p.x + off * width * 0.55,
+            y: p.y + (off * 0.2) * width,
+          }));
+          return <Path key={i} d={smoothPath(shifted)} fill="none" stroke={color} strokeWidth={width * 0.38} strokeLinecap="round" strokeLinejoin="round" opacity={0.42 + i * 0.06} />;
+        })}
+      </G>
+    );
+  }
+
+  // ── Pencil — graphite grain texture ──────────────────────────────────────
+  if (tool === 'pencil') {
+    const d = smoothPath(points);
+    const g1 = points.map(p => ({ ...p, x: p.x + 0.4, y: p.y - 0.3 }));
+    const g2 = points.map(p => ({ ...p, x: p.x - 0.3, y: p.y + 0.4 }));
+    return (
+      <G opacity={opacity}>
+        <Path d={smoothPath(g1)} fill="none" stroke={color} strokeWidth={width * 0.5}  strokeLinecap="round" strokeLinejoin="round" opacity={0.18} strokeDasharray="6,2" />
+        <Path d={smoothPath(g2)} fill="none" stroke={color} strokeWidth={width * 0.4}  strokeLinecap="round" strokeLinejoin="round" opacity={0.15} strokeDasharray="3,5" />
+        <Path d={d}             fill="none" stroke={color} strokeWidth={width * 1.1}  strokeLinecap="round" strokeLinejoin="round" opacity={0.22} />
+        <Path d={d}             fill="none" stroke={color} strokeWidth={width * 0.55} strokeLinecap="round" strokeLinejoin="round" opacity={0.82} />
+      </G>
+    );
+  }
+
+  // ── Calligraphy ───────────────────────────────────────────────────────────
   if (tool === 'calligraphy') {
     return <Path d={calligraphyPath(points, width)} fill={color} opacity={opacity} />;
   }
+
+  // ── Pixel ────────────────────────────────────────────────────────────────
   if (tool === 'pixel') {
     return <Path d={pixelPath(points, width)} fill={color} opacity={opacity} />;
   }
+
+  // ── Brush / Fountain / Ink — variable width ───────────────────────────────
   if (tool === 'brush' || tool === 'fountain' || tool === 'ink') {
     return <Path d={variableWidthPath(points, width, tool)} fill={color} opacity={opacity} />;
   }
+
+  // ── Default (ballpoint) ───────────────────────────────────────────────────
   return <Path d={smoothPath(points)} fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" opacity={opacity} />;
 }
 
@@ -326,6 +419,9 @@ export function DrawingCanvas({ width, height }: DrawingCanvasProps) {
   const strokeIdRef = useRef<string>('');
   const lastTsRef = useRef<number>(0);
   const isDownRef = useRef(false);
+
+  const isShapeTool = (t: string) =>
+    t === 'line-shape' || t === 'circle-shape' || t === 'rect-shape' || t === 'arrow-shape';
 
   const panResponder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -352,13 +448,18 @@ export function DrawingCanvas({ width, height }: DrawingCanvasProps) {
       if (!isDownRef.current) return;
       const { locationX: x, locationY: y } = evt.nativeEvent;
       const prev = currentPointsRef.current[currentPointsRef.current.length - 1];
-      if (prev && Math.hypot(x - prev.x, y - prev.y) < 1.5) return;
+      if (prev && Math.hypot(x - prev.x, y - prev.y) < (isShapeTool(activeTool) ? 0 : 1.5)) return;
       const now = Date.now();
       const dt = now - lastTsRef.current;
       lastTsRef.current = now;
       const force = (evt.nativeEvent as any).force || 0.5;
       const pt: StrokePoint = { x, y, pressure: force, timestamp: dt };
-      currentPointsRef.current = [...currentPointsRef.current, pt];
+      // For shape tools, keep only first point + current point (clean preview)
+      if (isShapeTool(activeTool)) {
+        currentPointsRef.current = [currentPointsRef.current[0], pt];
+      } else {
+        currentPointsRef.current = [...currentPointsRef.current, pt];
+      }
       updateCurrentStroke({
         id: strokeIdRef.current,
         tool: isErasing ? 'eraser' : activeTool,
@@ -419,7 +520,11 @@ export function DrawingCanvas({ width, height }: DrawingCanvasProps) {
         {strokes.map(s => <StrokeRenderer key={s.id} stroke={s} />)}
         {currentStroke && currentStroke.points.length > 0 && <StrokeRenderer stroke={currentStroke} />}
         {lastEraserPt && (
-          <Circle cx={lastEraserPt.x} cy={lastEraserPt.y} r={penWidth * 1.5} fill="none" stroke={lineColor} strokeWidth={1.5} opacity={0.8} />
+          <G>
+            <Circle cx={lastEraserPt.x} cy={lastEraserPt.y} r={penWidth * 1.5} fill="white" opacity={0.15} />
+            <Circle cx={lastEraserPt.x} cy={lastEraserPt.y} r={penWidth * 1.5} fill="none" stroke={lineColor} strokeWidth={1.5} opacity={0.9} />
+            <Circle cx={lastEraserPt.x} cy={lastEraserPt.y} r={penWidth * 0.4} fill={lineColor} opacity={0.5} />
+          </G>
         )}
       </Svg>
     </View>

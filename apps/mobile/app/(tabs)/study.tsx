@@ -18,6 +18,7 @@ import { haptic } from '../../src/utils/haptics';
 
 interface Flashcard {
   id: string; front: string; back: string; deckId: string;
+  hint?: string;
   difficulty: 'easy' | 'good' | 'hard' | 'again';
   interval: number; easeFactor: number; nextReview: string;
   reviewCount: number; mastered: boolean; tags: string[];
@@ -31,6 +32,7 @@ interface Deck {
 
 type StudyTab = 'decks' | 'review' | 'stats' | 'pomodoro';
 type PomodoroMode = 'focus' | 'short' | 'long';
+type QuizMode = 'flashcard' | 'multiChoice';
 
 const STORAGE_KEY_DECKS = '@ishu_study_decks';
 const STORAGE_KEY_CARDS = '@ishu_study_cards';
@@ -99,8 +101,15 @@ export default function StudyScreen() {
   const [newDeckDesc, setNewDeckDesc] = useState('');
   const [newCardFront, setNewCardFront] = useState('');
   const [newCardBack, setNewCardBack] = useState('');
+  const [newCardHint, setNewCardHint] = useState('');
   const [newCardDeck, setNewCardDeck] = useState('');
   const [newCardTag, setNewCardTag] = useState('');
+
+  // Quiz & hint state
+  const [quizMode, setQuizMode] = useState<QuizMode>('flashcard');
+  const [showHint, setShowHint] = useState(false);
+  const [mcChoices, setMcChoices] = useState<string[]>([]);
+  const [mcSelected, setMcSelected] = useState<string | null>(null);
 
   // Pomodoro
   const [pomodoroActive, setPomodoroActive] = useState(false);
@@ -117,6 +126,18 @@ export default function StudyScreen() {
   const currentCard = reviewQueue[currentIdx];
   const totalMastered = useMemo(() => cards.filter(c => c.mastered).length, [cards]);
   const totalReviews = useMemo(() => cards.reduce((s, c) => s + c.reviewCount, 0), [cards]);
+
+  // ── Multiple choice generation ─────────────────────────────────────────────
+  useMemo(() => {
+    if (!currentCard || quizMode !== 'multiChoice') return;
+    const wrongPool = cards.filter(c => c.id !== currentCard.id && c.back !== currentCard.back);
+    const shuffled = [...wrongPool].sort(() => Math.random() - 0.5);
+    const wrongs = shuffled.slice(0, 3).map(c => c.back);
+    const choices = [...wrongs, currentCard.back].sort(() => Math.random() - 0.5);
+    setMcChoices(choices);
+    setMcSelected(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentCard?.id, quizMode]);
 
   // ── Persistence ──────────────────────────────────────────────────────────────
 
@@ -172,6 +193,7 @@ export default function StudyScreen() {
 
   const handleDifficulty = (diff: 'easy'|'good'|'hard'|'again') => {
     haptic.medium();
+    setShowHint(false); setMcSelected(null);
     setSessionResults(prev => ({ ...prev, [diff]: prev[diff] + 1 }));
     // Update card
     setCards(prev => prev.map(c => c.id === currentCard.id ? {
@@ -191,13 +213,15 @@ export default function StudyScreen() {
     }
   };
 
-  const startReview = (deck: Deck) => {
+  const startReview = (deck: Deck, mode?: QuizMode) => {
     const dc = cards.filter(c => c.deckId === deck.id);
     if (!dc.length) { Alert.alert('No Cards', 'Add flashcards to this deck first!'); return; }
     setReviewDeckId(deck.id);
     setReviewQueue([...dc].sort(() => Math.random() - 0.5));
     setCurrentIdx(0); setIsFlipped(false); flipValue.value = 0;
     setSessionComplete(false); setSessionResults({ easy:0, good:0, hard:0, again:0 });
+    setShowHint(false); setMcSelected(null);
+    if (mode) setQuizMode(mode);
     setActiveTab('review'); haptic.success();
   };
 
@@ -225,12 +249,12 @@ export default function StudyScreen() {
     const id = `c${Date.now()}`;
     const tags = newCardTag.split(',').map(t => t.trim()).filter(Boolean);
     setCards(p => [...p, {
-      id, front: newCardFront.trim(), back: newCardBack.trim(), deckId: newCardDeck,
-      difficulty: 'good', interval: 0, easeFactor: 2.5,
+      id, front: newCardFront.trim(), back: newCardBack.trim(), hint: newCardHint.trim() || undefined,
+      deckId: newCardDeck, difficulty: 'good', interval: 0, easeFactor: 2.5,
       nextReview: new Date().toISOString(), reviewCount: 0, mastered: false, tags,
     }]);
     setDecks(p => p.map(d => d.id === newCardDeck ? { ...d, cardCount: d.cardCount + 1 } : d));
-    setNewCardFront(''); setNewCardBack(''); setNewCardTag(''); setShowCreateCard(false); haptic.success();
+    setNewCardFront(''); setNewCardBack(''); setNewCardHint(''); setNewCardTag(''); setShowCreateCard(false); haptic.success();
   };
 
   const deleteDeck = (deckId: string) => {
@@ -423,8 +447,8 @@ export default function StudyScreen() {
             </Animated.View>
           ) : currentCard ? (
             <View style={{ flex:1 }}>
-              {/* Progress bar */}
-              <View style={{ flexDirection:'row', alignItems:'center', gap:10, marginBottom:16, marginTop:4 }}>
+              {/* Progress + mode toggle */}
+              <View style={{ flexDirection:'row', alignItems:'center', gap:10, marginBottom:12, marginTop:4 }}>
                 <View style={{ flex:1, height:6, backgroundColor:colors.border, borderRadius:3, overflow:'hidden' }}>
                   <View style={{ height:'100%', borderRadius:3, backgroundColor:colors.primary, width:`${((currentIdx) / reviewQueue.length) * 100}%` }} />
                 </View>
@@ -434,49 +458,115 @@ export default function StudyScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Card */}
-              <TouchableOpacity onPress={handleFlip} activeOpacity={0.9} style={{ flex:1, maxHeight:320 }}>
-                <Animated.View style={[{ flex:1, backgroundColor:colors.card, borderRadius:24, borderWidth:1, borderColor:colors.border, padding:28, alignItems:'center', justifyContent:'center', shadowColor:'#000', shadowOffset:{width:0,height:8}, shadowOpacity:0.1, shadowRadius:20, elevation:6 }, cardScaleStyle]}>
-                  <Animated.View style={[StyleSheet.absoluteFill, { alignItems:'center', justifyContent:'center', padding:28 }, frontStyle]}>
-                    <Text style={{ fontSize:Colors.font.xs, fontWeight:'700', color:colors.textMuted, textTransform:'uppercase', letterSpacing:0.5, marginBottom:16 }}>Question</Text>
-                    <Text style={{ fontSize:Colors.font.xl, fontWeight:'700', color:colors.text, textAlign:'center', lineHeight:30 }}>{currentCard.front}</Text>
-                    {currentCard.tags.length > 0 && (
-                      <View style={{ flexDirection:'row', flexWrap:'wrap', gap:6, marginTop:16, justifyContent:'center' }}>
-                        {currentCard.tags.map(t => <View key={t} style={{ backgroundColor:colors.primarySoft, borderRadius:99, paddingHorizontal:10, paddingVertical:3 }}><Text style={{ fontSize:Colors.font.xs, color:colors.primary, fontWeight:'600' }}>#{t}</Text></View>)}
-                      </View>
-                    )}
-                  </Animated.View>
-                  <Animated.View style={[StyleSheet.absoluteFill, { alignItems:'center', justifyContent:'center', padding:28 }, backStyle]}>
-                    <Text style={{ fontSize:Colors.font.xs, fontWeight:'700', color:'#10b981', textTransform:'uppercase', letterSpacing:0.5, marginBottom:16 }}>Answer</Text>
-                    <Text style={{ fontSize:Colors.font.base, color:colors.text, textAlign:'center', lineHeight:26 }}>{currentCard.back}</Text>
-                  </Animated.View>
-                </Animated.View>
-              </TouchableOpacity>
+              {/* Mode toggle */}
+              <View style={{ flexDirection:'row', backgroundColor:colors.inputBg, borderRadius:12, padding:3, marginBottom:12, gap:2 }}>
+                {([{id:'flashcard',icon:'rotate-3d-variant',label:'Flashcard'},{id:'multiChoice',icon:'format-list-radio',label:'Quiz'}] as const).map(m => (
+                  <TouchableOpacity key={m.id} style={{ flex:1, flexDirection:'row', alignItems:'center', justifyContent:'center', gap:5, paddingVertical:7, borderRadius:9, backgroundColor: quizMode===m.id ? colors.surface : 'transparent' }}
+                    onPress={() => { setQuizMode(m.id); setIsFlipped(false); flipValue.value=0; setMcSelected(null); setShowHint(false); haptic.select(); }}>
+                    <MaterialCommunityIcons name={m.icon} size={14} color={quizMode===m.id ? colors.primary : colors.textMuted} />
+                    <Text style={{ fontSize:12, fontWeight:'700', color:quizMode===m.id ? colors.primary : colors.textMuted }}>{m.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-              <TouchableOpacity onPress={handleFlip} style={{ marginTop:12 }}>
-                <View style={{ backgroundColor:colors.inputBg, borderRadius:16, padding:14, alignItems:'center', borderWidth:1, borderColor:colors.border, flexDirection:'row', justifyContent:'center', gap:8 }}>
-                  <MaterialCommunityIcons name="rotate-3d-variant" size={18} color={colors.textSecondary} />
-                  <Text style={{ fontSize:Colors.font.base, color:colors.textSecondary, fontWeight:'600' }}>{isFlipped ? 'View Question' : 'Reveal Answer'}</Text>
-                </View>
-              </TouchableOpacity>
+              {/* Card (Flashcard mode) */}
+              {quizMode === 'flashcard' ? (
+                <>
+                  <TouchableOpacity onPress={handleFlip} activeOpacity={0.9} style={{ flex:1, maxHeight:300 }}>
+                    <Animated.View style={[{ flex:1, backgroundColor:colors.card, borderRadius:24, borderWidth:1, borderColor:colors.border, padding:28, alignItems:'center', justifyContent:'center', shadowColor:'#000', shadowOffset:{width:0,height:8}, shadowOpacity:0.1, shadowRadius:20, elevation:6 }, cardScaleStyle]}>
+                      <Animated.View style={[StyleSheet.absoluteFill, { alignItems:'center', justifyContent:'center', padding:28 }, frontStyle]}>
+                        <Text style={{ fontSize:Colors.font.xs, fontWeight:'700', color:colors.textMuted, textTransform:'uppercase', letterSpacing:0.5, marginBottom:16 }}>Question</Text>
+                        <Text style={{ fontSize:Colors.font.xl, fontWeight:'700', color:colors.text, textAlign:'center', lineHeight:30 }}>{currentCard.front}</Text>
+                        {currentCard.tags.length > 0 && (
+                          <View style={{ flexDirection:'row', flexWrap:'wrap', gap:6, marginTop:16, justifyContent:'center' }}>
+                            {currentCard.tags.map(t => <View key={t} style={{ backgroundColor:colors.primarySoft, borderRadius:99, paddingHorizontal:10, paddingVertical:3 }}><Text style={{ fontSize:Colors.font.xs, color:colors.primary, fontWeight:'600' }}>#{t}</Text></View>)}
+                          </View>
+                        )}
+                      </Animated.View>
+                      <Animated.View style={[StyleSheet.absoluteFill, { alignItems:'center', justifyContent:'center', padding:28 }, backStyle]}>
+                        <Text style={{ fontSize:Colors.font.xs, fontWeight:'700', color:'#10b981', textTransform:'uppercase', letterSpacing:0.5, marginBottom:16 }}>Answer</Text>
+                        <Text style={{ fontSize:Colors.font.base, color:colors.text, textAlign:'center', lineHeight:26 }}>{currentCard.back}</Text>
+                      </Animated.View>
+                    </Animated.View>
+                  </TouchableOpacity>
 
-              {isFlipped && (
-                <Animated.View entering={FadeInDown.springify()} style={{ marginTop:16 }}>
-                  <Text style={{ fontSize:Colors.font.xs, fontWeight:'700', color:colors.textMuted, textTransform:'uppercase', letterSpacing:0.5, textAlign:'center', marginBottom:10 }}>How well did you know this?</Text>
-                  <View style={{ flexDirection:'row', gap:8 }}>
-                    {([
-                      { label:'Again', sub:'<1m', color:'#ef4444', diff:'again' as const },
-                      { label:'Hard',  sub:'4d',  color:'#f59e0b', diff:'hard' as const },
-                      { label:'Good',  sub:'8d',  color:'#3b82f6', diff:'good' as const },
-                      { label:'Easy',  sub:'14d', color:'#10b981', diff:'easy' as const },
-                    ]).map(btn => (
-                      <TouchableOpacity key={btn.diff} style={{ flex:1, backgroundColor:btn.color, borderRadius:14, paddingVertical:12, alignItems:'center', gap:2 }} onPress={() => handleDifficulty(btn.diff)}>
-                        <Text style={{ color:'#fff', fontWeight:'800', fontSize:Colors.font.sm }}>{btn.label}</Text>
-                        <Text style={{ color:'rgba(255,255,255,0.7)', fontSize:10 }}>{btn.sub}</Text>
+                  {/* Hint + flip */}
+                  <View style={{ flexDirection:'row', gap:8, marginTop:12 }}>
+                    {currentCard.hint && !isFlipped && (
+                      <TouchableOpacity onPress={() => setShowHint(v => !v)} style={{ backgroundColor:colors.inputBg, borderRadius:14, padding:14, alignItems:'center', justifyContent:'center', borderWidth:1, borderColor:colors.border, minWidth:52 }}>
+                        <MaterialCommunityIcons name={showHint ? 'lightbulb' : 'lightbulb-outline'} size={18} color={showHint ? '#f59e0b' : colors.textMuted} />
                       </TouchableOpacity>
-                    ))}
+                    )}
+                    <TouchableOpacity onPress={handleFlip} style={{ flex:1 }}>
+                      <View style={{ backgroundColor:colors.inputBg, borderRadius:16, padding:14, alignItems:'center', borderWidth:1, borderColor:colors.border, flexDirection:'row', justifyContent:'center', gap:8 }}>
+                        <MaterialCommunityIcons name="rotate-3d-variant" size={18} color={colors.textSecondary} />
+                        <Text style={{ fontSize:Colors.font.base, color:colors.textSecondary, fontWeight:'600' }}>{isFlipped ? 'View Question' : 'Reveal Answer'}</Text>
+                      </View>
+                    </TouchableOpacity>
                   </View>
-                </Animated.View>
+
+                  {showHint && currentCard.hint && (
+                    <Animated.View entering={FadeInDown.duration(200)} style={{ backgroundColor:'#fef3c7', borderRadius:14, padding:12, marginTop:8, flexDirection:'row', gap:8, alignItems:'flex-start' }}>
+                      <MaterialCommunityIcons name="lightbulb" size={16} color='#f59e0b' />
+                      <Text style={{ flex:1, fontSize:Colors.font.sm, color:'#92400e' }}>{currentCard.hint}</Text>
+                    </Animated.View>
+                  )}
+
+                  {isFlipped && (
+                    <Animated.View entering={FadeInDown.springify()} style={{ marginTop:12 }}>
+                      <Text style={{ fontSize:Colors.font.xs, fontWeight:'700', color:colors.textMuted, textTransform:'uppercase', letterSpacing:0.5, textAlign:'center', marginBottom:10 }}>How well did you know this?</Text>
+                      <View style={{ flexDirection:'row', gap:8 }}>
+                        {([
+                          { label:'Again', sub:'<1m', color:'#ef4444', diff:'again' as const },
+                          { label:'Hard',  sub:'4d',  color:'#f59e0b', diff:'hard' as const },
+                          { label:'Good',  sub:'8d',  color:'#3b82f6', diff:'good' as const },
+                          { label:'Easy',  sub:'14d', color:'#10b981', diff:'easy' as const },
+                        ]).map(btn => (
+                          <TouchableOpacity key={btn.diff} style={{ flex:1, backgroundColor:btn.color, borderRadius:14, paddingVertical:12, alignItems:'center', gap:2 }} onPress={() => handleDifficulty(btn.diff)}>
+                            <Text style={{ color:'#fff', fontWeight:'800', fontSize:Colors.font.sm }}>{btn.label}</Text>
+                            <Text style={{ color:'rgba(255,255,255,0.7)', fontSize:10 }}>{btn.sub}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </Animated.View>
+                  )}
+                </>
+              ) : (
+                /* ── Multiple Choice Mode ── */
+                <View style={{ flex:1 }}>
+                  <View style={{ backgroundColor:colors.card, borderRadius:24, borderWidth:1, borderColor:colors.border, padding:24, marginBottom:14, shadowColor:'#000', shadowOffset:{width:0,height:4}, shadowOpacity:0.08, shadowRadius:12, elevation:4 }}>
+                    <Text style={{ fontSize:Colors.font.xs, fontWeight:'700', color:colors.textMuted, textTransform:'uppercase', letterSpacing:0.5, marginBottom:12 }}>Question</Text>
+                    <Text style={{ fontSize:Colors.font.xl, fontWeight:'700', color:colors.text, textAlign:'center', lineHeight:30 }}>{currentCard.front}</Text>
+                  </View>
+                  {mcChoices.map((choice, ci) => {
+                    const isCorrect = choice === currentCard.back;
+                    const isSelected = mcSelected === choice;
+                    const revealed = mcSelected !== null;
+                    let bg = colors.inputBg; let border = colors.border; let tc = colors.text;
+                    if (revealed && isCorrect) { bg = '#f0fdf4'; border = '#22c55e'; tc = '#166534'; }
+                    else if (revealed && isSelected && !isCorrect) { bg = '#fff1f2'; border = '#ef4444'; tc = '#9f1239'; }
+                    return (
+                      <TouchableOpacity key={ci} disabled={revealed}
+                        style={{ backgroundColor:bg, borderRadius:16, borderWidth:2, borderColor:border, padding:14, marginBottom:10, flexDirection:'row', alignItems:'center', gap:12 }}
+                        onPress={() => {
+                          setMcSelected(choice);
+                          haptic.light();
+                          if (isCorrect) {
+                            setTimeout(() => handleDifficulty('easy'), 900);
+                          } else {
+                            setTimeout(() => handleDifficulty('again'), 1200);
+                          }
+                        }}>
+                        <View style={{ width:28, height:28, borderRadius:14, borderWidth:2, borderColor:border, alignItems:'center', justifyContent:'center', backgroundColor: revealed && isCorrect ? '#22c55e' : (revealed && isSelected ? '#ef4444' : 'transparent') }}>
+                          {revealed && isCorrect && <MaterialCommunityIcons name="check" size={14} color="#fff" />}
+                          {revealed && isSelected && !isCorrect && <MaterialCommunityIcons name="close" size={14} color="#fff" />}
+                          {!revealed && <Text style={{ fontSize:11, fontWeight:'800', color:colors.textMuted }}>{String.fromCharCode(65+ci)}</Text>}
+                        </View>
+                        <Text style={{ flex:1, fontSize:Colors.font.sm, fontWeight:'600', color:tc, lineHeight:20 }}>{choice}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               )}
             </View>
           ) : null}
@@ -629,6 +719,7 @@ export default function StudyScreen() {
             <Text style={{ fontSize:Colors.font.xl, fontWeight:'800', color:colors.text, marginBottom:20 }}>New Flashcard</Text>
             <TextInput style={{ backgroundColor:colors.inputBg, borderRadius:14, padding:14, fontSize:Colors.font.base, color:colors.text, marginBottom:12, borderWidth:1, borderColor:colors.border, minHeight:80, textAlignVertical:'top' }} placeholder="Front — question or term…" placeholderTextColor={colors.textMuted} value={newCardFront} onChangeText={setNewCardFront} multiline autoFocus />
             <TextInput style={{ backgroundColor:colors.inputBg, borderRadius:14, padding:14, fontSize:Colors.font.base, color:colors.text, marginBottom:12, borderWidth:1, borderColor:colors.border, minHeight:80, textAlignVertical:'top' }} placeholder="Back — answer or definition…" placeholderTextColor={colors.textMuted} value={newCardBack} onChangeText={setNewCardBack} multiline />
+            <TextInput style={{ backgroundColor:'#fef3c7', borderRadius:14, padding:14, fontSize:Colors.font.sm, color:'#92400e', marginBottom:12, borderWidth:1, borderColor:'#f59e0b44' }} placeholder="💡 Hint (optional — shown during review)" placeholderTextColor='#b45309' value={newCardHint} onChangeText={setNewCardHint} />
             <TextInput style={{ backgroundColor:colors.inputBg, borderRadius:14, padding:14, fontSize:Colors.font.sm, color:colors.text, marginBottom:14, borderWidth:1, borderColor:colors.border }} placeholder="Tags (comma-separated, optional)" placeholderTextColor={colors.textMuted} value={newCardTag} onChangeText={setNewCardTag} />
             <Text style={{ fontSize:Colors.font.sm, fontWeight:'700', color:colors.textSecondary, marginBottom:8 }}>Select Deck</Text>
             {decks.length === 0 ? (

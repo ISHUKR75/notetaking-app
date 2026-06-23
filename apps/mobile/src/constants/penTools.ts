@@ -1,7 +1,8 @@
 export type PenToolType =
   | 'ballpoint' | 'fountain' | 'brush' | 'pencil' | 'marker'
   | 'chalk' | 'neon' | 'calligraphy' | 'ink' | 'watercolor'
-  | 'crayon' | 'airbrush' | 'highlighter' | 'eraser' | 'pixel';
+  | 'crayon' | 'airbrush' | 'highlighter' | 'eraser' | 'pixel'
+  | 'line-shape' | 'circle-shape' | 'rect-shape' | 'arrow-shape';
 
 export interface PenTool {
   id: PenToolType;
@@ -155,6 +156,38 @@ export const EXTENDED_COLORS = [
   '#f9a8d4', '#d6b896', '#fcd34d', '#a7f3d0', '#a5b4fc', '#fbcfe8',
   '#fef08a', '#bfdbfe', '#ddd6fe', '#fce7f3', '#ecfccb', '#d1fae5',
 ];
+
+// Shape tools are appended after the drawing tools
+PEN_TOOLS.push(
+  {
+    id: 'line-shape', name: 'Line', icon: 'minus', emoji: '📏',
+    defaultWidth: 2, minWidth: 0.5, maxWidth: 20, defaultOpacity: 1.0,
+    pressureSensitive: false, textureEffect: false,
+    description: 'Straight line', thinAtStart: false, thinAtEnd: false,
+    blendMode: 'normal', category: 'pen',
+  },
+  {
+    id: 'circle-shape', name: 'Circle', icon: 'circle-outline', emoji: '⭕',
+    defaultWidth: 2, minWidth: 0.5, maxWidth: 20, defaultOpacity: 1.0,
+    pressureSensitive: false, textureEffect: false,
+    description: 'Circle / ellipse', thinAtStart: false, thinAtEnd: false,
+    blendMode: 'normal', category: 'pen',
+  },
+  {
+    id: 'rect-shape', name: 'Rectangle', icon: 'rectangle-outline', emoji: '🔲',
+    defaultWidth: 2, minWidth: 0.5, maxWidth: 20, defaultOpacity: 1.0,
+    pressureSensitive: false, textureEffect: false,
+    description: 'Rectangle / square', thinAtStart: false, thinAtEnd: false,
+    blendMode: 'normal', category: 'pen',
+  },
+  {
+    id: 'arrow-shape', name: 'Arrow', icon: 'arrow-right-thin', emoji: '➡️',
+    defaultWidth: 2, minWidth: 0.5, maxWidth: 20, defaultOpacity: 1.0,
+    pressureSensitive: false, textureEffect: false,
+    description: 'Arrow with head', thinAtStart: false, thinAtEnd: false,
+    blendMode: 'normal', category: 'pen',
+  },
+);
 
 export const COLOR_PALETTES = [
   { id: 'standard', name: 'Standard', colors: DEFAULT_PEN_COLORS },

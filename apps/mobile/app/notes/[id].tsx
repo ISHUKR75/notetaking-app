@@ -24,7 +24,7 @@ import { shareNote, exportNoteAsMarkdown, exportNoteAsText, exportNotesToJSON } 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 type ViewMode = 'edit' | 'preview' | 'draw';
-type FormatCategory = 'text' | 'insert' | 'list' | 'style';
+type FormatCategory = 'text' | 'insert' | 'list' | 'callout' | 'style';
 
 // ─── Page background helpers ──────────────────────────────────────────────────
 function getPageBg(bg: PageBackground, isDark: boolean): string {
@@ -67,22 +67,110 @@ function renderMarkdownLine(
   if (line.startsWith('### ')) return <Text key={idx} style={{ fontSize: 17, fontWeight: '700', color: tc, marginTop: 12, marginBottom: 4, lineHeight: 24 }}>{line.slice(4)}</Text>;
   if (line.startsWith('#### ')) return <Text key={idx} style={{ fontSize: 15, fontWeight: '600', color: colors.textSecondary, marginTop: 10, marginBottom: 4 }}>{line.slice(5)}</Text>;
 
-  if (line.startsWith('> ')) return (
-    <View key={idx} style={{ borderLeftWidth: 4, borderLeftColor: colors.primary, paddingLeft: 14, marginVertical: 8, backgroundColor: colors.primarySoft, borderRadius: 8, paddingVertical: 10, paddingRight: 12 }}>
-      <Text style={{ fontSize: 15, color: colors.textSecondary, fontStyle: 'italic', lineHeight: 23 }}>{inlineMarkdown(line.slice(2), colors, idx)}</Text>
-    </View>
-  );
-
-  if (line.includes('💡') && line.startsWith('> ')) return (
-    <View key={idx} style={{ backgroundColor: '#eff6ff', borderLeftWidth: 4, borderLeftColor: '#3b82f6', borderRadius: 10, padding: 12, marginVertical: 6 }}>
-      <Text style={{ fontSize: 14, color: '#1e40af', lineHeight: 21 }}>{line.slice(2)}</Text>
-    </View>
-  );
-  if (line.includes('⚠️') && line.startsWith('> ')) return (
-    <View key={idx} style={{ backgroundColor: '#fef3c7', borderLeftWidth: 4, borderLeftColor: '#f59e0b', borderRadius: 10, padding: 12, marginVertical: 6 }}>
-      <Text style={{ fontSize: 14, color: '#92400e', lineHeight: 21 }}>{line.slice(2)}</Text>
-    </View>
-  );
+  if (line.startsWith('> ')) {
+    const text = line.slice(2);
+    if (text.startsWith('💡') || text.startsWith('[!TIP]')) {
+      const body = text.replace(/^\[!TIP\]\s*/, '').replace(/^💡\s*/, '');
+      return (
+        <View key={idx} style={{ backgroundColor: '#eff6ff', borderLeftWidth: 4, borderLeftColor: '#3b82f6', borderRadius: 12, padding: 12, marginVertical: 6, flexDirection: 'row', gap: 10 }}>
+          <Text style={{ fontSize: 18, lineHeight: 24 }}>💡</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 }}>Tip</Text>
+            <Text style={{ fontSize: 14, color: '#1e40af', lineHeight: 21 }}>{body}</Text>
+          </View>
+        </View>
+      );
+    }
+    if (text.startsWith('⚠️') || text.startsWith('[!WARNING]')) {
+      const body = text.replace(/^\[!WARNING\]\s*/, '').replace(/^⚠️\s*/, '');
+      return (
+        <View key={idx} style={{ backgroundColor: '#fef3c7', borderLeftWidth: 4, borderLeftColor: '#f59e0b', borderRadius: 12, padding: 12, marginVertical: 6, flexDirection: 'row', gap: 10 }}>
+          <Text style={{ fontSize: 18, lineHeight: 24 }}>⚠️</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#b45309', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 }}>Warning</Text>
+            <Text style={{ fontSize: 14, color: '#92400e', lineHeight: 21 }}>{body}</Text>
+          </View>
+        </View>
+      );
+    }
+    if (text.startsWith('ℹ️') || text.startsWith('[!INFO]')) {
+      const body = text.replace(/^\[!INFO\]\s*/, '').replace(/^ℹ️\s*/, '');
+      return (
+        <View key={idx} style={{ backgroundColor: '#f0f9ff', borderLeftWidth: 4, borderLeftColor: '#0ea5e9', borderRadius: 12, padding: 12, marginVertical: 6, flexDirection: 'row', gap: 10 }}>
+          <Text style={{ fontSize: 18, lineHeight: 24 }}>ℹ️</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#0284c7', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 }}>Info</Text>
+            <Text style={{ fontSize: 14, color: '#0369a1', lineHeight: 21 }}>{body}</Text>
+          </View>
+        </View>
+      );
+    }
+    if (text.startsWith('✅') || text.startsWith('[!SUCCESS]')) {
+      const body = text.replace(/^\[!SUCCESS\]\s*/, '').replace(/^✅\s*/, '');
+      return (
+        <View key={idx} style={{ backgroundColor: '#f0fdf4', borderLeftWidth: 4, borderLeftColor: '#22c55e', borderRadius: 12, padding: 12, marginVertical: 6, flexDirection: 'row', gap: 10 }}>
+          <Text style={{ fontSize: 18, lineHeight: 24 }}>✅</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#16a34a', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 }}>Success</Text>
+            <Text style={{ fontSize: 14, color: '#166534', lineHeight: 21 }}>{body}</Text>
+          </View>
+        </View>
+      );
+    }
+    if (text.startsWith('❌') || text.startsWith('[!ERROR]')) {
+      const body = text.replace(/^\[!ERROR\]\s*/, '').replace(/^❌\s*/, '');
+      return (
+        <View key={idx} style={{ backgroundColor: '#fff1f2', borderLeftWidth: 4, borderLeftColor: '#ef4444', borderRadius: 12, padding: 12, marginVertical: 6, flexDirection: 'row', gap: 10 }}>
+          <Text style={{ fontSize: 18, lineHeight: 24 }}>❌</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#dc2626', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 }}>Error</Text>
+            <Text style={{ fontSize: 14, color: '#9f1239', lineHeight: 21 }}>{body}</Text>
+          </View>
+        </View>
+      );
+    }
+    if (text.startsWith('📝') || text.startsWith('[!NOTE]')) {
+      const body = text.replace(/^\[!NOTE\]\s*/, '').replace(/^📝\s*/, '');
+      return (
+        <View key={idx} style={{ backgroundColor: '#faf5ff', borderLeftWidth: 4, borderLeftColor: '#a855f7', borderRadius: 12, padding: 12, marginVertical: 6, flexDirection: 'row', gap: 10 }}>
+          <Text style={{ fontSize: 18, lineHeight: 24 }}>📝</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#9333ea', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 }}>Note</Text>
+            <Text style={{ fontSize: 14, color: '#6b21a8', lineHeight: 21 }}>{body}</Text>
+          </View>
+        </View>
+      );
+    }
+    if (text.startsWith('🔥') || text.startsWith('[!IMPORTANT]')) {
+      const body = text.replace(/^\[!IMPORTANT\]\s*/, '').replace(/^🔥\s*/, '');
+      return (
+        <View key={idx} style={{ backgroundColor: '#fff7ed', borderLeftWidth: 4, borderLeftColor: '#f97316', borderRadius: 12, padding: 12, marginVertical: 6, flexDirection: 'row', gap: 10 }}>
+          <Text style={{ fontSize: 18, lineHeight: 24 }}>🔥</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#ea580c', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 }}>Important</Text>
+            <Text style={{ fontSize: 14, color: '#9a3412', lineHeight: 21 }}>{body}</Text>
+          </View>
+        </View>
+      );
+    }
+    if (text.startsWith('🚨') || text.startsWith('[!DANGER]')) {
+      const body = text.replace(/^\[!DANGER\]\s*/, '').replace(/^🚨\s*/, '');
+      return (
+        <View key={idx} style={{ backgroundColor: '#fff1f2', borderLeftWidth: 4, borderLeftColor: '#f43f5e', borderRadius: 12, padding: 12, marginVertical: 6, flexDirection: 'row', gap: 10 }}>
+          <Text style={{ fontSize: 18, lineHeight: 24 }}>🚨</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#e11d48', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 }}>Danger</Text>
+            <Text style={{ fontSize: 14, color: '#881337', lineHeight: 21 }}>{body}</Text>
+          </View>
+        </View>
+      );
+    }
+    return (
+      <View key={idx} style={{ borderLeftWidth: 4, borderLeftColor: colors.primary, paddingLeft: 14, marginVertical: 8, backgroundColor: colors.primarySoft, borderRadius: 8, paddingVertical: 10, paddingRight: 12 }}>
+        <Text style={{ fontSize: 15, color: colors.textSecondary, fontStyle: 'italic', lineHeight: 23 }}>{inlineMarkdown(text, colors, idx)}</Text>
+      </View>
+    );
+  }
 
   if (line.startsWith('- [ ] ') || line.startsWith('* [ ] ')) {
     return (
@@ -150,17 +238,48 @@ function MarkdownPreview({ content, colors, onToggleCheck, pageTextColor }: {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
+
+    // ── Fenced code blocks ──────────────────────────────────────────────────
     if (line.startsWith('```')) {
       const lang = line.slice(3).trim();
       const codeLines: string[] = [];
       i++;
       while (i < lines.length && !lines[i].startsWith('```')) { codeLines.push(lines[i]); i++; }
       blocks.push(
-        <View key={`code-${i}`} style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 14, marginVertical: 8 }}>
-          {lang ? <Text style={{ fontSize: 10, color: '#94a3b8', fontWeight: '800', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>{lang}</Text> : null}
-          <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace', fontSize: 13, color: '#e2e8f0', lineHeight: 20 }}>{codeLines.join('\n')}</Text>
+        <View key={`code-${i}`} style={{ backgroundColor: '#0f172a', borderRadius: 14, padding: 16, marginVertical: 10, borderWidth: 1, borderColor: '#1e293b' }}>
+          {lang ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <Text style={{ fontSize: 10, color: '#64748b', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8 }}>{lang}</Text>
+              <View style={{ flexDirection: 'row', gap: 5 }}>
+                {['#ef4444', '#eab308', '#22c55e'].map(c => <View key={c} style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c }} />)}
+              </View>
+            </View>
+          ) : null}
+          <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace', fontSize: 13, color: '#e2e8f0', lineHeight: 21 }}>{codeLines.join('\n')}</Text>
         </View>
       );
+
+    // ── Math blocks $$...$$ ──────────────────────────────────────────────────
+    } else if (line === '$$') {
+      const mathLines: string[] = [];
+      i++;
+      while (i < lines.length && lines[i] !== '$$') { mathLines.push(lines[i]); i++; }
+      blocks.push(
+        <View key={`math-${i}`} style={{ backgroundColor: colors.inputBg, borderRadius: 14, padding: 16, marginVertical: 10, borderWidth: 1, borderColor: colors.primary + '44', alignItems: 'center' }}>
+          <Text style={{ fontSize: 10, fontWeight: '800', color: colors.primary, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>Math</Text>
+          <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace', fontSize: 16, color: colors.text, textAlign: 'center', lineHeight: 24, fontStyle: 'italic' }}>{mathLines.join('\n')}</Text>
+        </View>
+      );
+
+    // ── Single-line math $$...$$ ─────────────────────────────────────────────
+    } else if (line.startsWith('$$') && line.endsWith('$$') && line.length > 4) {
+      const math = line.slice(2, -2).trim();
+      blocks.push(
+        <View key={`imath-${i}`} style={{ backgroundColor: colors.inputBg, borderRadius: 12, padding: 12, marginVertical: 8, borderWidth: 1, borderColor: colors.primary + '44', alignItems: 'center' }}>
+          <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace', fontSize: 15, color: colors.text, fontStyle: 'italic' }}>{math}</Text>
+        </View>
+      );
+
     } else {
       blocks.push(renderMarkdownLine(line, i, colors, onToggleCheck, pageTextColor));
     }
@@ -174,6 +293,7 @@ const FORMAT_CATEGORIES = [
   { id: 'text' as FormatCategory, label: 'Text', icon: 'format-bold' },
   { id: 'insert' as FormatCategory, label: 'Insert', icon: 'plus-circle-outline' },
   { id: 'list' as FormatCategory, label: 'Lists', icon: 'format-list-bulleted' },
+  { id: 'callout' as FormatCategory, label: 'Callout', icon: 'tooltip-text-outline' },
   { id: 'style' as FormatCategory, label: 'Style', icon: 'palette-outline' },
 ];
 
@@ -405,6 +525,17 @@ export default function NoteEditorScreen() {
       { icon: 'format-list-checks', label: 'Checklist', action: () => insertBlock('\n- [ ] Task 1\n- [ ] Task 2\n- [ ] Task 3\n') },
       { icon: 'numeric', label: 'Numbered List', action: () => insertBlock('\n1. First\n2. Second\n3. Third\n') },
       { icon: 'format-list-bulleted-square', label: 'Square', action: () => insertBlock('\n▪ ') },
+    ],
+    callout: [
+      { icon: 'lightbulb-outline',        label: '💡 Tip',       action: () => insertBlock('\n> 💡 ') },
+      { icon: 'alert-outline',            label: '⚠️ Warning',   action: () => insertBlock('\n> ⚠️ ') },
+      { icon: 'information-outline',      label: 'ℹ️ Info',      action: () => insertBlock('\n> ℹ️ ') },
+      { icon: 'check-circle-outline',     label: '✅ Success',   action: () => insertBlock('\n> ✅ ') },
+      { icon: 'close-circle-outline',     label: '❌ Error',     action: () => insertBlock('\n> ❌ ') },
+      { icon: 'note-text-outline',        label: '📝 Note',      action: () => insertBlock('\n> 📝 ') },
+      { icon: 'fire',                     label: '🔥 Important', action: () => insertBlock('\n> 🔥 ') },
+      { icon: 'alarm-light-outline',      label: '🚨 Danger',    action: () => insertBlock('\n> 🚨 ') },
+      { icon: 'function-variant',         label: '$$ Math',      action: () => insertBlock('\n$$\n\n$$\n') },
     ],
     style: [
       { icon: 'palette-outline', label: 'Page Color', action: () => { setShowColorPicker(true); haptic.light(); } },
