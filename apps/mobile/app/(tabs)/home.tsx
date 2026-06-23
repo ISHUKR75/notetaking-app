@@ -37,7 +37,7 @@ export default function HomeScreen() {
   const { colors, settings, updateSettings, isDark } = useTheme();
   const {
     notes, notebooks, trashNote, pinNote, archiveNote, duplicateNote,
-    getRecentNotes, getPinnedNotes, getFlaggedNotes,
+    getRecentNotes, getPinnedNotes, getFlaggedNotes, importBackup,
   } = useNotes();
 
   const insets = useSafeAreaInsets();
@@ -82,20 +82,16 @@ export default function HomeScreen() {
   const handleImport = async () => {
     setShowQuickActions(false);
     try {
-      const result = await pickAndImportFile(notebooks);
+      const result = await pickAndImportFile(notebooks as any);
       if (result.type === 'error') { Alert.alert('Import Failed', result.error || 'Could not read file.'); return; }
       if (result.type === 'json' && result.data) {
-        const backup = result.data as any;
-        if (backup.notes && Array.isArray(backup.notes)) {
-          Alert.alert('Import Backup', `Found ${backup.notes.length} note(s). Import them?`, [
+        const bundle = result.data as any;
+        if (bundle.notes && Array.isArray(bundle.notes)) {
+          Alert.alert('Import Backup', `Found ${bundle.notes.length} note(s). Import them?`, [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Import', onPress: async () => {
-              const { createNote } = require('../../src/context/NotesContext');
-              let count = 0;
-              for (const n of backup.notes) {
-                try { await (notes as any).createNote?.({ title: n.title, content: n.content, type: n.type || 'text', tags: n.tags || [] }); count++; } catch {}
-              }
-              haptic.success(); Alert.alert('Done ✅', `Imported ${count} notes.`);
+              const { imported } = await importBackup(bundle);
+              haptic.success(); Alert.alert('Done ✅', `Imported ${imported} notes successfully!`);
             }},
           ]);
         }
@@ -103,7 +99,10 @@ export default function HomeScreen() {
         const d = result.data as any;
         Alert.alert('Import Note', `Import "${d.title || 'Imported'}"?`, [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Import', onPress: () => { haptic.success(); Alert.alert('Imported ✅', 'Note imported successfully!'); } },
+          { text: 'Import', onPress: async () => {
+            await importBackup({ version: '1.0', app: 'Ishu Notes', exportedAt: new Date().toISOString(), notes: [{ ...d, id: '', notebookId: null, tags: d.tags || [], color: 'none', pageBackground: 'none', isPinned: false, isFlagged: false, isArchived: false, isTrashed: false, isLocked: false, isFavorite: false, emoji: null, createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString(), trashedAt: null, wordCount: 0, readingTime: 0, hasHandwriting: false, hasAudio: false, hasImages: false, templateId: 'blank', pageCount: 1 }], notebooks: [], tags: [] });
+            haptic.success(); Alert.alert('Imported ✅', 'Note imported successfully!');
+          }},
         ]);
       }
     } catch (e: any) { Alert.alert('Import Failed', e?.message || 'Unknown error'); }

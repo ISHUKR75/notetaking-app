@@ -12,7 +12,7 @@ import { useTheme, AppSettings } from '../../src/context/ThemeContext';
 import { useNotes } from '../../src/context/NotesContext';
 import { Colors, ThemeColors, THEME_OPTIONS } from '../../src/constants/colors';
 import {
-  exportNotesToJSON, exportNoteAsMarkdown, exportAllAsMarkdownZip,
+  exportNotesToJSON, exportAllAsMarkdownZip,
   pickAndImportFile,
 } from '../../src/utils/exportImport';
 
@@ -83,7 +83,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export default function SettingsScreen() {
   const router = useRouter();
   const { colors, settings, updateSettings, isDark, appTheme } = useTheme();
-  const { notes, notebooks, tags, getTrashedNotes, createNote } = useNotes();
+  const { notes, notebooks, tags, getTrashedNotes, importBackup, exportBackup } = useNotes();
   const insets = useSafeAreaInsets();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
@@ -111,7 +111,7 @@ export default function SettingsScreen() {
   const trashedCount = getTrashedNotes().length;
   const activeNotes = notes.filter(n => !n.isTrashed);
 
-  const handleExport = async (format: 'json' | 'markdown' | 'text') => {
+  const handleExport = async (format: 'json' | 'markdown') => {
     if (activeNotes.length === 0) {
       Alert.alert('Nothing to Export', 'You have no notes to export.'); return;
     }
@@ -120,11 +120,10 @@ export default function SettingsScreen() {
     try {
       let result;
       if (format === 'json') {
-        result = await exportNotesToJSON(activeNotes, notebooks, tags, false);
-      } else if (format === 'markdown') {
-        result = await exportAllAsMarkdownZip(activeNotes);
+        const bundle = await exportBackup();
+        result = await exportNotesToJSON(bundle.notes as any, bundle.notebooks as any, bundle.tags as any, false);
       } else {
-        result = await exportAllAsMarkdownZip(activeNotes);
+        result = await exportAllAsMarkdownZip(activeNotes as any);
       }
       if (result.success) {
         haptic.success();
@@ -133,7 +132,7 @@ export default function SettingsScreen() {
         Alert.alert('Export Failed', result.message);
       }
     } catch (e: any) {
-      Alert.alert('Export Failed', e.message);
+      Alert.alert('Export Failed', e?.message || 'Unknown error');
     } finally {
       setIsExporting(false);
     }
@@ -144,9 +143,8 @@ export default function SettingsScreen() {
       'Export Notes',
       `Export ${activeNotes.length} note${activeNotes.length !== 1 ? 's' : ''}:`,
       [
-        { text: 'JSON Backup (recommended)', onPress: () => handleExport('json') },
-        { text: 'Markdown (.md)', onPress: () => handleExport('markdown') },
-        { text: 'Plain Text', onPress: () => handleExport('text') },
+        { text: '📦 JSON Backup (full backup, recommended)', onPress: () => handleExport('json') },
+        { text: '📄 All as Markdown', onPress: () => handleExport('markdown') },
         { text: 'Cancel', style: 'cancel' },
       ],
     );
@@ -156,59 +154,49 @@ export default function SettingsScreen() {
     setIsImporting(true);
     haptic.light();
     try {
-      const result = await pickAndImportFile(notebooks);
+      const result = await pickAndImportFile(notebooks as any);
       if (result.type === 'error') {
         Alert.alert('Import Failed', result.error || 'Could not read the file.');
         return;
       }
       if (result.type === 'json' && result.data) {
-        const backup = result.data as any;
-        if (backup.notes && Array.isArray(backup.notes)) {
+        const bundle = result.data as any;
+        if (bundle.notes && Array.isArray(bundle.notes)) {
           Alert.alert(
-            'Import Backup',
-            `Found ${backup.notes.length} note${backup.notes.length !== 1 ? 's' : ''} in this backup. Import them?`,
+            '📥 Import Backup',
+            `Found ${bundle.notes.length} note${bundle.notes.length !== 1 ? 's' : ''}${bundle.notebooks?.length ? ` in ${bundle.notebooks.length} notebook${bundle.notebooks.length !== 1 ? 's' : ''}` : ''}. Import them all?`,
             [
               { text: 'Cancel', style: 'cancel' },
               {
-                text: 'Import',
+                text: 'Import All',
                 onPress: async () => {
-                  let imported = 0;
-                  for (const note of backup.notes) {
-                    try {
-                      await createNote({
-                        title: note.title || 'Imported Note',
-                        content: note.content || '',
-                        type: note.type || 'text',
-                        tags: note.tags || [],
-                        color: note.color || 'none',
-                        isPinned: note.isPinned || false,
-                        isFlagged: note.isFlagged || false,
-                      });
-                      imported++;
-                    } catch {}
-                  }
+                  const { imported, errors } = await importBackup(bundle);
                   haptic.success();
-                  Alert.alert('Import Complete ✅', `Imported ${imported} notes successfully!`);
+                  Alert.alert(
+                    'Import Complete ✅',
+                    `Successfully imported ${imported} note${imported !== 1 ? 's' : ''}!${errors > 0 ? `\n⚠️ ${errors} item${errors !== 1 ? 's' : ''} skipped due to errors.` : ''}`,
+                  );
                 },
               },
             ],
           );
+        } else {
+          Alert.alert('Invalid File', 'This JSON file does not contain a valid Ishu Notes backup.');
         }
       } else if ((result.type === 'markdown' || result.type === 'text') && result.data) {
         const noteData = result.data as any;
         Alert.alert(
-          'Import Note',
+          '📄 Import Note',
           `Import "${noteData.title || 'Imported Note'}" as a new note?`,
           [
             { text: 'Cancel', style: 'cancel' },
             {
               text: 'Import',
               onPress: async () => {
-                await createNote({
-                  title: noteData.title || 'Imported Note',
-                  content: noteData.content || '',
-                  type: 'text',
-                  tags: noteData.tags || [],
+                await importBackup({
+                  version: '1.0', app: 'Ishu Notes', exportedAt: new Date().toISOString(),
+                  notes: [{ ...noteData, id: '', notebookId: null, tags: noteData.tags || [], color: 'none', pageBackground: 'none', isPinned: false, isFlagged: false, isArchived: false, isTrashed: false, isLocked: false, isFavorite: false, emoji: null, createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString(), trashedAt: null, wordCount: 0, readingTime: 0, hasHandwriting: false, hasAudio: false, hasImages: false, templateId: 'blank', pageCount: 1 }],
+                  notebooks: [], tags: [],
                 });
                 haptic.success();
                 Alert.alert('Imported ✅', 'Note imported successfully!');

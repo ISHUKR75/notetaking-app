@@ -3,3 +3,5 @@
 - [Storage keys](storage-keys.md) — `STORAGE_KEYS.STROKES` is a function `(noteId) => string`, not a plain string key
 - [Theme font scaling](theme-font-scaling.md) — ThemeContext exposes `sf(size)` and `contentLineHeight(fontSize)` helpers; apply inline (not in StyleSheet.create) since they depend on runtime settings
 - [NoteCard settings compliance](notecard-settings.md) — NoteCard reads `settings.showTags` and `settings.showWordCount` from `useTheme()` to conditionally show tags/word count
+- [Import/export architecture](import-export.md) — use `importBackup(BackupBundle)` from NotesContext (not exportImport.ts helpers) for full backup import; exportBackup() returns BackupBundle with strokesMap
+- [Page backgrounds](page-backgrounds.md) — PAGE_BACKGROUNDS array has 20 named colors; applied via getPageBg()/getPageTextColor() helpers in [id].tsx; picker opens from format bar palette icon or more menu

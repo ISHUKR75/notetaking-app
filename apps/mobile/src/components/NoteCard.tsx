@@ -90,8 +90,13 @@ export function NoteCard({
           </View>
         )}
         {note.isFlagged && (
-          <View style={[s.pinBadge, { right: note.isPinned ? 28 : 8, backgroundColor: '#f59e0b' }]}>
+          <View style={[s.pinBadge, { right: (note.isPinned ? 28 : 8) + (note.isFavorite ? 20 : 0), backgroundColor: '#f59e0b' }]}>
             <MaterialCommunityIcons name="flag" size={10} color="#fff" />
+          </View>
+        )}
+        {note.isFavorite && (
+          <View style={[s.pinBadge, { right: 8, backgroundColor: '#ef4444' }]}>
+            <MaterialCommunityIcons name="heart" size={10} color="#fff" />
           </View>
         )}
         <View style={s.gridTop}>
@@ -190,6 +195,7 @@ export function NoteCard({
               )}
               <Text style={s.title} numberOfLines={1}>{note.title}</Text>
               <View style={s.titleBadges}>
+                {note.isFavorite && <MaterialCommunityIcons name="heart" size={11} color="#ef4444" />}
                 {note.isFlagged && <MaterialCommunityIcons name="flag" size={11} color={colors.warning} />}
                 {note.isLocked && <MaterialCommunityIcons name="lock" size={11} color={colors.textMuted} />}
                 {note.hasHandwriting && <MaterialCommunityIcons name="pencil" size={11} color={colors.textMuted} />}
