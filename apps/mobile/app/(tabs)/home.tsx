@@ -17,6 +17,7 @@ import { sortNotes, filterNotes } from '../../src/utils/noteUtils';
 import { Colors } from '../../src/constants/colors';
 import { getTodayString } from '../../src/utils/dateUtils';
 import { haptic } from '../../src/utils/haptics';
+import { pickAndImportFile } from '../../src/utils/exportImport';
 
 type ViewMode = 'list' | 'grid';
 type FilterMode = 'all' | 'pinned' | 'flagged' | 'recent' | 'favorites';
@@ -76,6 +77,36 @@ export default function HomeScreen() {
   const handleDelete = (noteId: string) => {
     haptic.warning();
     trashNote(noteId);
+  };
+
+  const handleImport = async () => {
+    setShowQuickActions(false);
+    try {
+      const result = await pickAndImportFile(notebooks);
+      if (result.type === 'error') { Alert.alert('Import Failed', result.error || 'Could not read file.'); return; }
+      if (result.type === 'json' && result.data) {
+        const backup = result.data as any;
+        if (backup.notes && Array.isArray(backup.notes)) {
+          Alert.alert('Import Backup', `Found ${backup.notes.length} note(s). Import them?`, [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Import', onPress: async () => {
+              const { createNote } = require('../../src/context/NotesContext');
+              let count = 0;
+              for (const n of backup.notes) {
+                try { await (notes as any).createNote?.({ title: n.title, content: n.content, type: n.type || 'text', tags: n.tags || [] }); count++; } catch {}
+              }
+              haptic.success(); Alert.alert('Done ✅', `Imported ${count} notes.`);
+            }},
+          ]);
+        }
+      } else if ((result.type === 'markdown' || result.type === 'text') && result.data) {
+        const d = result.data as any;
+        Alert.alert('Import Note', `Import "${d.title || 'Imported'}"?`, [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Import', onPress: () => { haptic.success(); Alert.alert('Imported ✅', 'Note imported successfully!'); } },
+        ]);
+      }
+    } catch (e: any) { Alert.alert('Import Failed', e?.message || 'Unknown error'); }
   };
 
   const onRefresh = useCallback(async () => {
@@ -294,8 +325,8 @@ export default function HomeScreen() {
                 { icon: 'camera-outline', label: 'Scan Doc', color: '#3b82f6', action: () => { Alert.alert('Scanner', 'Document scanner coming soon!'); setShowQuickActions(false); } },
                 { icon: 'notebook-plus-outline', label: 'New Notebook', color: '#8b5cf6', action: () => { router.push('/(tabs)/notebooks'); setShowQuickActions(false); } },
                 { icon: 'tag-plus-outline', label: 'Manage Tags', color: '#ec4899', action: () => { Alert.alert('Tags', 'Tag manager coming soon!'); setShowQuickActions(false); } },
-                { icon: 'import', label: 'Import', color: '#06b6d4', action: () => { Alert.alert('Import', 'Import from Notion, Evernote, and more — coming soon!'); setShowQuickActions(false); } },
-                { icon: 'trash-can-outline', label: 'Trash', color: '#ef4444', action: () => { Alert.alert('Trash', `${notes.filter(n => n.isTrashed).length} items in trash.`); setShowQuickActions(false); } },
+                { icon: 'import', label: 'Import', color: '#06b6d4', action: handleImport },
+                { icon: 'trash-can-outline', label: 'Trash', color: '#ef4444', action: () => { setShowQuickActions(false); router.push('/notes/trash'); } },
               ].map((action, i) => (
                 <Animated.View key={action.label} entering={ZoomIn.delay(i * 30).springify()}>
                   <TouchableOpacity style={s.quickActionItem} onPress={action.action}>

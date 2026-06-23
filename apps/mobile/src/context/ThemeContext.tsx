@@ -69,6 +69,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   wristRejection: true,
 };
 
+export const LINE_HEIGHT_MULTIPLIERS: Record<string, number> = {
+  tight: 1.3,
+  normal: 1.6,
+  relaxed: 1.85,
+  loose: 2.1,
+};
+
 interface ThemeContextValue {
   colors: ThemeColors;
   settings: AppSettings;
@@ -76,6 +83,10 @@ interface ThemeContextValue {
   isDark: boolean;
   appTheme: AppTheme;
   fontScale: number;
+  /** Scale a font size by the user's font-size setting */
+  sf: (size: number) => number;
+  /** Content line-height based on settings */
+  contentLineHeight: (fontSize?: number) => number;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -113,10 +124,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     Storage.set(STORAGE_KEYS.SETTINGS, newSettings);
   };
 
+  const sf = (size: number) => Math.round(size * fontScale);
+  const contentLineHeight = (fontSize: number = 16) => {
+    const scaled = fontSize * fontScale;
+    const mult = LINE_HEIGHT_MULTIPLIERS[settings.lineHeight] ?? 1.6;
+    return Math.round(scaled * mult);
+  };
+
   if (!loaded) return null;
 
   return (
-    <ThemeContext.Provider value={{ colors, settings, updateSettings, isDark, appTheme, fontScale }}>
+    <ThemeContext.Provider value={{ colors, settings, updateSettings, isDark, appTheme, fontScale, sf, contentLineHeight }}>
       {children}
     </ThemeContext.Provider>
   );

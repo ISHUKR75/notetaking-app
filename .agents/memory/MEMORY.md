@@ -1,3 +1,5 @@
 - [Haptics web fix](haptics-web.md) — never import expo-haptics directly; use `src/utils/haptics.ts` wrapper that no-ops on web
 - [Note editor architecture](note-editor.md) — [id].tsx has Edit/Preview/Draw modes; markdown preview uses custom native renderer; focus mode hides all chrome
 - [Storage keys](storage-keys.md) — `STORAGE_KEYS.STROKES` is a function `(noteId) => string`, not a plain string key
+- [Theme font scaling](theme-font-scaling.md) — ThemeContext exposes `sf(size)` and `contentLineHeight(fontSize)` helpers; apply inline (not in StyleSheet.create) since they depend on runtime settings
+- [NoteCard settings compliance](notecard-settings.md) — NoteCard reads `settings.showTags` and `settings.showWordCount` from `useTheme()` to conditionally show tags/word count

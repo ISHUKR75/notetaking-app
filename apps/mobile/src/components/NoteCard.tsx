@@ -43,7 +43,7 @@ export function NoteCard({
   showNotebook,
   notebookName,
 }: NoteCardProps) {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, settings } = useTheme();
   const translateX = useRef(new Animated.Value(0)).current;
   const [showActions, setShowActions] = React.useState(false);
 
@@ -204,11 +204,11 @@ export function NoteCard({
               {showNotebook && notebookName ? (
                 <Text style={s.notebook} numberOfLines={1}> · {notebookName}</Text>
               ) : null}
-              {note.wordCount > 0 ? (
+              {settings.showWordCount && note.wordCount > 0 ? (
                 <Text style={s.wordCount}> · {note.wordCount}w</Text>
               ) : null}
             </View>
-            {note.tags.length > 0 && (
+            {settings.showTags && note.tags.length > 0 && (
               <View style={s.tagRow}>
                 {note.tags.slice(0, 3).map(tag => (
                   <View key={tag} style={s.tagBadge}>

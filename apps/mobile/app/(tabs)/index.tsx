@@ -1,13 +1,12 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform,
-  Alert, ScrollView, Modal, Pressable, PanResponder, Animated as RNAnimated,
+  Alert, ScrollView, Modal, Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, {
-  FadeIn, FadeOut, SlideInDown, SlideOutDown,
-  useSharedValue, useAnimatedStyle, withSpring, withTiming,
+  FadeIn, SlideInDown, SlideOutDown,
 } from 'react-native-reanimated';
 import * as KeepAwake from 'expo-keep-awake';
 import { haptic } from '../../src/utils/haptics';
@@ -17,29 +16,21 @@ import { useNotes } from '../../src/context/NotesContext';
 import { DrawingCanvas } from '../../src/components/DrawingCanvas';
 import { Colors } from '../../src/constants/colors';
 import { Storage, STORAGE_KEYS } from '../../src/utils/storage';
-import { PEN_TOOLS, PenToolType, DEFAULT_PEN_COLORS, NEON_COLORS } from '../../src/constants/penTools';
+import { PEN_TOOLS, PenToolType, DEFAULT_PEN_COLORS, NEON_COLORS, EXTENDED_COLORS } from '../../src/constants/penTools';
 import { TEMPLATES } from '../../src/constants/templates';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
-const EXTENDED_COLORS = [
-  '#000000', '#1a1a2e', '#16213e', '#0f3460',
-  '#e94560', '#ff6b6b', '#ff8e53', '#ffd460',
-  '#f9ca24', '#6ab04c', '#22a6b3', '#30336b',
-  '#535c68', '#95afc0', '#c7ecee', '#ffffff',
-  '#6c5ce7', '#a29bfe', '#fd79a8', '#e17055',
-  '#00b894', '#00cec9', '#0984e3', '#74b9ff',
-  '#2d3436', '#636e72', '#b2bec3', '#dfe6e9',
-  '#d63031', '#e84393', '#fdcb6e', '#55efc4',
-];
-
-type CanvasPage = { id: string; strokes: any[]; template: string };
+type CanvasPage = { id: string; template: string };
 
 export default function DrawScreen() {
-  const { colors, isDark } = useTheme();
-  const { strokes, clearAll, canUndo, canRedo, undo, redo, activeTool, setActiveTool,
+  const { colors } = useTheme();
+  const {
+    strokes, clearAll, canUndo, canRedo, undo, redo,
+    activeTool, setActiveTool,
     penColor, setPenColor, penWidth, setPenWidth, penOpacity, setPenOpacity,
-    selectedTemplate, setSelectedTemplate, loadStrokes } = useDrawing();
+    selectedTemplate, setSelectedTemplate,
+  } = useDrawing();
   const { createNote } = useNotes();
   const insets = useSafeAreaInsets();
 
@@ -50,26 +41,20 @@ export default function DrawScreen() {
   const [showToolPanel, setShowToolPanel] = useState(false);
   const [showTemplatePanel, setShowTemplatePanel] = useState(false);
   const [showSizePanel, setShowSizePanel] = useState(false);
-  const [strokeCount, setStrokeCount] = useState(0);
-  const [pages, setPages] = useState<CanvasPage[]>([{ id: '1', strokes: [], template: 'blank' }]);
+  const [pages, setPages] = useState<CanvasPage[]>([{ id: '1', template: 'blank' }]);
   const [currentPage, setCurrentPage] = useState(0);
   const [showPagePanel, setShowPagePanel] = useState(false);
-  const [zoom, setZoom] = useState(100);
+  const [colorTab, setColorTab] = useState<'standard' | 'neon' | 'extended'>('standard');
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
-  const bottomPad = Platform.OS === 'web' ? 34 + 84 : insets.bottom + 60;
-  const toolbarH = isFullscreen ? 0 : 62;
-  const canvasH = SCREEN_H - topPad - bottomPad - toolbarH;
+  const botPad = Platform.OS === 'web' ? 34 + 84 : insets.bottom + 60;
+  const toolbarH = isFullscreen ? 0 : 60;
+  const canvasH = SCREEN_H - topPad - botPad - toolbarH - 52;
 
-  useEffect(() => {
-    setStrokeCount(strokes.length);
-  }, [strokes]);
+  const currentTool = PEN_TOOLS.find(t => t.id === activeTool);
 
   const handleSave = async () => {
-    if (strokes.length === 0) {
-      Alert.alert('Nothing to Save', 'Draw something on the canvas first!');
-      return;
-    }
+    if (!strokes.length) { Alert.alert('Nothing to Save', 'Draw something first!'); return; }
     setIsSaving(true);
     haptic.success();
     try {
@@ -85,62 +70,56 @@ export default function DrawScreen() {
         { text: 'Keep Drawing', style: 'cancel' },
         { text: 'Clear Canvas', onPress: () => clearAll() },
       ]);
-    } finally {
-      setIsSaving(false);
-    }
+    } finally { setIsSaving(false); }
   };
 
   const handleClearAll = () => {
-    if (strokes.length === 0) return;
-    Alert.alert('Clear Canvas', `This will erase all ${strokes.length} strokes. Continue?`, [
+    if (!strokes.length) return;
+    Alert.alert('Clear Canvas', `This will erase all ${strokes.length} strokes.`, [
       { text: 'Clear All', style: 'destructive', onPress: () => { clearAll(); haptic.warning(); } },
       { text: 'Cancel', style: 'cancel' },
     ]);
   };
 
   const toggleKeepAwake = async () => {
-    if (keepAwake) { await KeepAwake.deactivateKeepAwake(); }
-    else { await KeepAwake.activateKeepAwakeAsync(); }
-    setKeepAwake(!keepAwake);
-    Haptics.selectionAsync();
+    if (keepAwake) await KeepAwake.deactivateKeepAwake();
+    else await KeepAwake.activateKeepAwakeAsync();
+    setKeepAwake(v => !v);
+    haptic.select();
   };
 
   const selectTool = (tool: PenToolType) => {
     setActiveTool(tool);
     setShowToolPanel(false);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptic.light();
   };
 
   const selectColor = (color: string) => {
     setPenColor(color);
     setShowColorPanel(false);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptic.light();
   };
 
-  const currentTool = PEN_TOOLS.find(t => t.id === activeTool);
   const s = styles(colors);
 
-  const renderToolIcon = (toolId: PenToolType, size = 22) => {
-    const tool = PEN_TOOLS.find(t => t.id === toolId);
-    if (!tool) return null;
-    return <MaterialCommunityIcons name={tool.icon as any} size={size} color={activeTool === toolId ? '#fff' : colors.text} />;
-  };
+  const colorsByTab = colorTab === 'standard' ? DEFAULT_PEN_COLORS : colorTab === 'neon' ? NEON_COLORS : EXTENDED_COLORS;
 
   return (
     <View style={[s.screen, { backgroundColor: colors.background }]}>
+      {/* Header */}
       {!isFullscreen && (
         <Animated.View entering={FadeIn} style={[s.header, { paddingTop: topPad + 6 }]}>
           <View style={s.headerLeft}>
             <Text style={s.title}>Canvas</Text>
-            <View style={s.strokeBadge}>
-              <Text style={s.strokeText}>{strokeCount}</Text>
-            </View>
+            {strokes.length > 0 && (
+              <View style={s.strokeBadge}>
+                <Text style={s.strokeText}>{strokes.length}</Text>
+              </View>
+            )}
           </View>
-
           <View style={s.headerCenter}>
-            <Text style={s.pageIndicator}>Page {currentPage + 1}</Text>
+            <Text style={s.pageLabel}>Page {currentPage + 1} of {pages.length}</Text>
           </View>
-
           <View style={s.headerRight}>
             <TouchableOpacity style={[s.headerBtn, keepAwake && { backgroundColor: colors.primarySoft }]} onPress={toggleKeepAwake}>
               <MaterialCommunityIcons name={keepAwake ? 'eye' : 'eye-off-outline'} size={18} color={keepAwake ? colors.primary : colors.textMuted} />
@@ -153,9 +132,9 @@ export default function DrawScreen() {
               onPress={handleSave}
               disabled={isSaving}
             >
-              <MaterialCommunityIcons name="content-save-outline" size={16} color={strokes.length > 0 ? '#fff' : colors.textMuted} />
-              <Text style={[s.saveBtnText, { color: strokes.length > 0 ? '#fff' : colors.textMuted }]}>
-                {isSaving ? 'Saving...' : 'Save'}
+              <MaterialCommunityIcons name="content-save-outline" size={15} color={strokes.length > 0 ? '#fff' : colors.textMuted} />
+              <Text style={[s.saveBtnTxt, { color: strokes.length > 0 ? '#fff' : colors.textMuted }]}>
+                {isSaving ? 'Saving…' : 'Save'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -168,74 +147,60 @@ export default function DrawScreen() {
         </TouchableOpacity>
       )}
 
-      <View style={[s.canvasWrapper, { height: canvasH }]}>
+      {/* Canvas */}
+      <View style={[s.canvasWrap, { height: canvasH }]}>
         <DrawingCanvas width={SCREEN_W} height={canvasH} />
-
-        {isFullscreen && strokes.length > 0 && (
-          <Animated.View entering={FadeIn} style={s.fullscreenStrokeCount}>
-            <Text style={s.fullscreenStrokeText}>{strokeCount} strokes</Text>
-          </Animated.View>
-        )}
-
-        {zoom !== 100 && (
-          <View style={s.zoomBadge}>
-            <Text style={s.zoomText}>{zoom}%</Text>
-          </View>
-        )}
       </View>
 
+      {/* Main toolbar */}
       {!isFullscreen && (
-        <View style={s.mainToolbar}>
-          <View style={s.toolbarLeft}>
+        <View style={s.toolbar}>
+          {/* Left: erase / undo / redo */}
+          <View style={s.tbLeft}>
             <TouchableOpacity
-              style={[s.toolBtn, activeTool === 'eraser' && s.toolBtnActive]}
-              onPress={() => selectTool(activeTool === 'eraser' ? 'ballpoint' : 'eraser')}
+              style={[s.tbBtn, activeTool === 'eraser' && s.tbBtnActive]}
+              onPress={() => { selectTool(activeTool === 'eraser' ? 'ballpoint' : 'eraser'); }}
             >
               <MaterialCommunityIcons name="eraser" size={20} color={activeTool === 'eraser' ? '#fff' : colors.text} />
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[s.toolBtn, !canUndo && s.toolBtnDisabled]}
-              onPress={() => { undo(); Haptics.selectionAsync(); }}
-              disabled={!canUndo}
-            >
+            <TouchableOpacity style={[s.tbBtn, !canUndo && s.tbBtnDim]} onPress={() => { if (canUndo) { undo(); haptic.select(); } }} disabled={!canUndo}>
               <MaterialCommunityIcons name="undo" size={20} color={canUndo ? colors.text : colors.textMuted} />
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[s.toolBtn, !canRedo && s.toolBtnDisabled]}
-              onPress={() => { redo(); Haptics.selectionAsync(); }}
-              disabled={!canRedo}
-            >
+            <TouchableOpacity style={[s.tbBtn, !canRedo && s.tbBtnDim]} onPress={() => { if (canRedo) { redo(); haptic.select(); } }} disabled={!canRedo}>
               <MaterialCommunityIcons name="redo" size={20} color={canRedo ? colors.text : colors.textMuted} />
             </TouchableOpacity>
           </View>
 
-          <View style={s.toolbarCenter}>
-            <TouchableOpacity style={s.activePenBtn} onPress={() => setShowToolPanel(true)}>
+          {/* Center: active tool, color dot, width */}
+          <View style={s.tbCenter}>
+            <TouchableOpacity style={s.activePenBtn} onPress={() => { setShowToolPanel(true); haptic.light(); }}>
               <MaterialCommunityIcons name={(currentTool?.icon || 'pen') as any} size={22} color={penColor === '#ffffff' ? colors.text : penColor} />
-              <MaterialCommunityIcons name="chevron-up" size={14} color={colors.textMuted} />
+              <MaterialCommunityIcons name="chevron-up" size={13} color={colors.textMuted} />
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[s.colorDot, { backgroundColor: penColor, borderColor: colors.border }]}
-              onPress={() => setShowColorPanel(true)}
+              style={[s.colorDot, { backgroundColor: penColor, borderColor: penColor === '#ffffff' ? colors.border : penColor + '44' }]}
+              onPress={() => { setShowColorPanel(true); haptic.light(); }}
             />
 
-            <TouchableOpacity style={s.widthBtn} onPress={() => setShowSizePanel(!showSizePanel)}>
-              <View style={[s.widthDot, { width: Math.min(penWidth * 3, 24), height: Math.min(penWidth * 3, 24), backgroundColor: penColor === '#ffffff' ? colors.text : penColor, borderRadius: 12 }]} />
+            <TouchableOpacity style={s.tbBtn} onPress={() => { setShowSizePanel(v => !v); haptic.select(); }}>
+              <View style={{
+                width: Math.min(penWidth * 2.5, 26), height: Math.min(penWidth * 2.5, 26),
+                borderRadius: 13, backgroundColor: penColor === '#ffffff' ? colors.text : penColor,
+              }} />
             </TouchableOpacity>
           </View>
 
-          <View style={s.toolbarRight}>
-            <TouchableOpacity style={s.toolBtn} onPress={() => setShowTemplatePanel(true)}>
+          {/* Right: template, page, clear */}
+          <View style={s.tbRight}>
+            <TouchableOpacity style={s.tbBtn} onPress={() => { setShowTemplatePanel(true); haptic.light(); }}>
               <MaterialCommunityIcons name="layers-outline" size={20} color={colors.text} />
             </TouchableOpacity>
-            <TouchableOpacity style={s.toolBtn} onPress={() => setShowPagePanel(true)}>
+            <TouchableOpacity style={s.tbBtn} onPress={() => { setShowPagePanel(true); haptic.light(); }}>
               <MaterialCommunityIcons name="file-multiple-outline" size={20} color={colors.text} />
             </TouchableOpacity>
             {strokes.length > 0 && (
-              <TouchableOpacity style={s.toolBtn} onPress={handleClearAll}>
+              <TouchableOpacity style={s.tbBtn} onPress={handleClearAll}>
                 <MaterialCommunityIcons name="delete-sweep-outline" size={20} color={colors.error} />
               </TouchableOpacity>
             )}
@@ -243,184 +208,180 @@ export default function DrawScreen() {
         </View>
       )}
 
-      {showSizePanel && (
+      {/* Size Panel */}
+      {showSizePanel && !isFullscreen && (
         <Animated.View entering={SlideInDown} exiting={SlideOutDown} style={[s.sizePanel, { backgroundColor: colors.surface }]}>
-          <View style={s.sizePanelHeader}>
-            <Text style={s.panelTitle}>Stroke Size</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <Text style={{ fontSize: Colors.font.base, fontWeight: '700', color: colors.text }}>Stroke Size & Opacity</Text>
             <TouchableOpacity onPress={() => setShowSizePanel(false)}>
               <MaterialCommunityIcons name="close" size={20} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
-          <View style={s.sizePreview}>
-            <View style={[s.sizePreviewLine, { height: Math.min(penWidth * 2, 40), backgroundColor: penColor === '#ffffff' ? colors.text : penColor, borderRadius: penWidth }]} />
+          <View style={{ alignItems: 'center', height: 44, justifyContent: 'center', marginBottom: 10 }}>
+            <View style={{ height: Math.min(penWidth * 2, 36), minWidth: 40, borderRadius: penWidth, backgroundColor: penColor === '#ffffff' ? colors.text : penColor }} />
           </View>
-          <View style={s.sizeGrid}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
             {[0.5, 1, 2, 3, 5, 8, 12, 18, 24, 36].map(w => (
               <TouchableOpacity
                 key={w}
-                style={[s.sizeBtn, penWidth === w && s.sizeBtnActive]}
-                onPress={() => { setPenWidth(w); Haptics.selectionAsync(); }}
+                style={{ width: 56, height: 60, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: penWidth === w ? colors.primarySoft : colors.inputBg, borderWidth: penWidth === w ? 2 : 0, borderColor: colors.primary }}
+                onPress={() => { setPenWidth(w); haptic.select(); }}
               >
-                <View style={[s.sizeDot, {
-                  width: Math.min(w * 2.5, 32), height: Math.min(w * 2.5, 32),
-                  backgroundColor: penColor === '#ffffff' ? colors.text : penColor,
-                  borderRadius: Math.min(w * 2.5, 32) / 2,
-                  opacity: penWidth === w ? 1 : 0.5,
-                }]} />
-                <Text style={s.sizeBtnLabel}>{w}px</Text>
+                <View style={{ width: Math.min(w * 2.5, 32), height: Math.min(w * 2.5, 32), borderRadius: 16, backgroundColor: penColor === '#ffffff' ? colors.text : penColor, opacity: penWidth === w ? 1 : 0.5 }} />
+                <Text style={{ fontSize: 10, color: colors.textMuted, fontWeight: '500' }}>{w}px</Text>
               </TouchableOpacity>
             ))}
           </View>
-          <View style={s.opacityRow}>
-            <Text style={s.panelSubtitle}>Opacity: {Math.round(penOpacity * 100)}%</Text>
-            <View style={s.opacityBtns}>
-              {[0.1, 0.25, 0.5, 0.75, 1.0].map(o => (
-                <TouchableOpacity
-                  key={o}
-                  style={[s.opacityBtn, penOpacity === o && s.opacityBtnActive]}
-                  onPress={() => { setPenOpacity(o); Haptics.selectionAsync(); }}
-                >
-                  <View style={[s.opacityDot, { backgroundColor: penColor === '#ffffff' ? colors.text : penColor, opacity: o }]} />
-                  <Text style={s.opacityLabel}>{Math.round(o * 100)}%</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+          <Text style={{ fontSize: Colors.font.sm, color: colors.textSecondary, fontWeight: '600', marginBottom: 8 }}>Opacity: {Math.round(penOpacity * 100)}%</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {[0.1, 0.25, 0.5, 0.75, 1.0].map(o => (
+              <TouchableOpacity
+                key={o}
+                style={{ flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 10, gap: 4, backgroundColor: penOpacity === o ? colors.primarySoft : colors.inputBg, borderWidth: penOpacity === o ? 1.5 : 0, borderColor: colors.primary }}
+                onPress={() => { setPenOpacity(o); haptic.select(); }}
+              >
+                <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: penColor === '#ffffff' ? colors.text : penColor, opacity: o }} />
+                <Text style={{ fontSize: 10, color: colors.textMuted, fontWeight: '500' }}>{Math.round(o * 100)}%</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </Animated.View>
       )}
 
+      {/* Tool picker */}
       <Modal visible={showToolPanel} transparent animationType="slide">
         <Pressable style={s.overlay} onPress={() => setShowToolPanel(false)}>
           <Pressable style={[s.sheet, { backgroundColor: colors.surface }]}>
-            <View style={s.sheetHandle} />
-            <Text style={[s.sheetTitle, { color: colors.text }]}>Pen Tools</Text>
-            <View style={s.toolGrid}>
-              {PEN_TOOLS.map(tool => (
-                <TouchableOpacity
-                  key={tool.id}
-                  style={[s.toolGridBtn, activeTool === tool.id && s.toolGridBtnActive]}
-                  onPress={() => selectTool(tool.id)}
-                >
-                  <View style={[s.toolGridIcon, activeTool === tool.id && { backgroundColor: colors.primary }]}>
-                    <MaterialCommunityIcons
-                      name={tool.icon as any}
-                      size={26}
-                      color={activeTool === tool.id ? '#fff' : colors.text}
-                    />
+            <View style={s.handle} />
+            <Text style={[s.sheetTitle, { color: colors.text }]}>Drawing Tools</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {['pen', 'brush', 'effect', 'erase'].map(cat => {
+                const catTools = PEN_TOOLS.filter(t => t.category === cat);
+                return (
+                  <View key={cat} style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: Colors.font.xs, fontWeight: '800', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
+                      {cat === 'pen' ? 'Pens' : cat === 'brush' ? 'Brushes' : cat === 'effect' ? 'Effects' : 'Eraser'}
+                    </Text>
+                    <View style={s.toolGrid}>
+                      {catTools.map(tool => (
+                        <TouchableOpacity
+                          key={tool.id}
+                          style={[s.toolGridBtn, activeTool === tool.id && s.toolGridBtnActive]}
+                          onPress={() => selectTool(tool.id)}
+                        >
+                          <View style={[s.toolGridIcon, { backgroundColor: activeTool === tool.id ? colors.primary : colors.card }]}>
+                            <MaterialCommunityIcons name={tool.icon as any} size={24} color={activeTool === tool.id ? '#fff' : colors.text} />
+                          </View>
+                          <Text style={{ fontSize: Colors.font.xs, fontWeight: '700', color: activeTool === tool.id ? colors.primary : colors.text, textAlign: 'center' }}>{tool.name}</Text>
+                          <Text style={{ fontSize: 9, color: colors.textMuted, textAlign: 'center' }} numberOfLines={2}>{tool.description}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   </View>
-                  <Text style={[s.toolGridLabel, { color: activeTool === tool.id ? colors.primary : colors.text }]}>
-                    {tool.name}
-                  </Text>
-                  <Text style={s.toolGridDesc}>{tool.description}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                );
+              })}
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
 
+      {/* Color picker */}
       <Modal visible={showColorPanel} transparent animationType="slide">
         <Pressable style={s.overlay} onPress={() => setShowColorPanel(false)}>
           <Pressable style={[s.sheet, { backgroundColor: colors.surface }]}>
-            <View style={s.sheetHandle} />
+            <View style={s.handle} />
             <Text style={[s.sheetTitle, { color: colors.text }]}>Color</Text>
-            <View style={s.currentColorRow}>
-              <View style={[s.currentColorSwatch, { backgroundColor: penColor }]} />
-              <Text style={[s.currentColorLabel, { color: colors.textSecondary }]}>{penColor.toUpperCase()}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16, backgroundColor: colors.inputBg, padding: 12, borderRadius: 14 }}>
+              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: penColor, borderWidth: 1, borderColor: colors.border }} />
+              <Text style={{ fontSize: Colors.font.base, fontWeight: '600', color: colors.textSecondary }}>{penColor.toUpperCase()}</Text>
             </View>
-            <Text style={s.colorSectionLabel}>Standard</Text>
-            <View style={s.colorGrid}>
-              {DEFAULT_PEN_COLORS.map(c => (
-                <TouchableOpacity
-                  key={c}
-                  style={[s.colorSwatch, { backgroundColor: c }, penColor === c && s.colorSwatchActive,
-                    c === '#ffffff' && { borderWidth: 1, borderColor: colors.border }]}
-                  onPress={() => selectColor(c)}
-                >
-                  {penColor === c && <MaterialCommunityIcons name="check" size={14} color={c === '#ffffff' || c === '#eab308' ? '#000' : '#fff'} />}
+            {/* Tabs */}
+            <View style={{ flexDirection: 'row', backgroundColor: colors.inputBg, borderRadius: 12, padding: 3, marginBottom: 14, gap: 2 }}>
+              {(['standard', 'neon', 'extended'] as const).map(tab => (
+                <TouchableOpacity key={tab} style={{ flex: 1, paddingVertical: 7, borderRadius: 9, alignItems: 'center', backgroundColor: colorTab === tab ? colors.surface : 'transparent' }}
+                  onPress={() => setColorTab(tab)}>
+                  <Text style={{ fontSize: Colors.font.xs, fontWeight: '700', color: colorTab === tab ? colors.primary : colors.textMuted, textTransform: 'capitalize' }}>{tab}</Text>
                 </TouchableOpacity>
               ))}
             </View>
-            <Text style={s.colorSectionLabel}>Neon</Text>
-            <View style={s.colorGrid}>
-              {NEON_COLORS.map(c => (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: colorTab === 'extended' ? 8 : 10, marginBottom: 8 }}>
+              {colorsByTab.map(c => (
                 <TouchableOpacity
                   key={c}
-                  style={[s.colorSwatch, { backgroundColor: c }, penColor === c && s.colorSwatchActive]}
-                  onPress={() => selectColor(c)}
-                >
-                  {penColor === c && <MaterialCommunityIcons name="check" size={14} color="#000" />}
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={s.colorSectionLabel}>Extended Palette</Text>
-            <View style={s.colorGridSmall}>
-              {EXTENDED_COLORS.map(c => (
-                <TouchableOpacity
-                  key={c}
-                  style={[s.colorSwatchSm, { backgroundColor: c }, penColor === c && s.colorSwatchActive,
+                  style={[{
+                    width: colorTab === 'extended' ? 30 : 36,
+                    height: colorTab === 'extended' ? 30 : 36,
+                    borderRadius: colorTab === 'extended' ? 15 : 18,
+                    backgroundColor: c,
+                    alignItems: 'center', justifyContent: 'center',
+                  }, penColor === c && { borderWidth: 3, borderColor: colors.primary },
                     c === '#ffffff' && { borderWidth: 1, borderColor: colors.border }]}
                   onPress={() => selectColor(c)}
-                />
+                >
+                  {penColor === c && <MaterialCommunityIcons name="check" size={13} color={c === '#ffffff' || c === '#eab308' || c === '#fef08a' ? '#000' : '#fff'} />}
+                </TouchableOpacity>
               ))}
             </View>
           </Pressable>
         </Pressable>
       </Modal>
 
+      {/* Template picker */}
       <Modal visible={showTemplatePanel} transparent animationType="slide">
         <Pressable style={s.overlay} onPress={() => setShowTemplatePanel(false)}>
           <Pressable style={[s.sheet, { backgroundColor: colors.surface }]}>
-            <View style={s.sheetHandle} />
+            <View style={s.handle} />
             <Text style={[s.sheetTitle, { color: colors.text }]}>Page Template</Text>
-            <View style={s.templateGrid}>
-              {TEMPLATES.map(t => (
-                <TouchableOpacity
-                  key={t.id}
-                  style={[s.templateBtn, selectedTemplate === t.id && { borderColor: t.color, borderWidth: 2, backgroundColor: t.color + '22' }]}
-                  onPress={() => { setSelectedTemplate(t.id); setShowTemplatePanel(false); Haptics.selectionAsync(); }}
-                >
-                  <View style={[s.templateIcon, { backgroundColor: t.color + '22' }]}>
-                    <MaterialCommunityIcons name={t.icon as any} size={28} color={t.color} />
-                  </View>
-                  <Text style={[s.templateName, { color: colors.text }]}>{t.name}</Text>
-                  {selectedTemplate === t.id && (
-                    <View style={[s.templateCheck, { backgroundColor: t.color }]}>
-                      <MaterialCommunityIcons name="check" size={10} color="#fff" />
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={s.templateGrid}>
+                {TEMPLATES.map(t => (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={[s.templateBtn, { backgroundColor: colors.inputBg }, selectedTemplate === t.id && { borderColor: t.color, borderWidth: 2, backgroundColor: t.color + '22' }]}
+                    onPress={() => { setSelectedTemplate(t.id); setShowTemplatePanel(false); haptic.select(); }}
+                  >
+                    <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: t.color + '22', alignItems: 'center', justifyContent: 'center' }}>
+                      <MaterialCommunityIcons name={t.icon as any} size={26} color={t.color} />
                     </View>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: colors.text, textAlign: 'center' }} numberOfLines={2}>{t.name}</Text>
+                    {selectedTemplate === t.id && (
+                      <View style={{ position: 'absolute', top: 6, right: 6, width: 18, height: 18, borderRadius: 9, backgroundColor: t.color, alignItems: 'center', justifyContent: 'center' }}>
+                        <MaterialCommunityIcons name="check" size={10} color="#fff" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
 
+      {/* Page Manager */}
       <Modal visible={showPagePanel} transparent animationType="slide">
         <Pressable style={s.overlay} onPress={() => setShowPagePanel(false)}>
           <Pressable style={[s.sheet, { backgroundColor: colors.surface }]}>
-            <View style={s.sheetHandle} />
+            <View style={s.handle} />
             <Text style={[s.sheetTitle, { color: colors.text }]}>Pages</Text>
-            <View style={s.pageInfo}>
-              <MaterialCommunityIcons name="file-document-outline" size={40} color={colors.primary} />
-              <Text style={[s.pageInfoTitle, { color: colors.text }]}>Page {currentPage + 1} of {pages.length}</Text>
-              <Text style={[s.pageInfoSub, { color: colors.textSecondary }]}>{strokes.length} strokes on this page</Text>
+            <View style={{ alignItems: 'center', paddingVertical: 20, gap: 8 }}>
+              <MaterialCommunityIcons name="file-document-outline" size={44} color={colors.primary} />
+              <Text style={{ fontSize: Colors.font.xl, fontWeight: '700', color: colors.text }}>Page {currentPage + 1} of {pages.length}</Text>
+              <Text style={{ fontSize: Colors.font.sm, color: colors.textSecondary }}>{strokes.length} strokes on this page</Text>
             </View>
-            <View style={s.pageActions}>
-              <TouchableOpacity
-                style={[s.pageActionBtn, { backgroundColor: colors.primary }]}
-                onPress={() => {
-                  setPages(p => [...p, { id: String(Date.now()), strokes: [], template: selectedTemplate }]);
-                  setCurrentPage(pages.length);
-                  clearAll();
-                  setShowPagePanel(false);
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                }}
-              >
-                <MaterialCommunityIcons name="plus" size={20} color="#fff" />
-                <Text style={s.pageActionText}>Add New Page</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={{ backgroundColor: colors.primary, borderRadius: 14, padding: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+              onPress={() => {
+                const newPage: CanvasPage = { id: String(Date.now()), template: selectedTemplate };
+                setPages(p => [...p, newPage]);
+                setCurrentPage(pages.length);
+                clearAll();
+                setShowPagePanel(false);
+                haptic.success();
+              }}
+            >
+              <MaterialCommunityIcons name="plus" size={20} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: Colors.font.base }}>Add New Page</Text>
+            </TouchableOpacity>
           </Pressable>
         </Pressable>
       </Modal>
@@ -432,140 +393,63 @@ const styles = (colors: typeof Colors.light) => StyleSheet.create({
   screen: { flex: 1 },
   header: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingBottom: 8,
+    paddingHorizontal: 14, paddingBottom: 8, gap: 6,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   title: { fontSize: Colors.font.xl, fontWeight: '800', color: colors.text },
-  strokeBadge: {
-    backgroundColor: colors.primarySoft, borderRadius: Colors.radius.full,
-    paddingHorizontal: 8, paddingVertical: 2,
-  },
+  strokeBadge: { backgroundColor: colors.primarySoft, borderRadius: 99, paddingHorizontal: 8, paddingVertical: 2 },
   strokeText: { fontSize: Colors.font.xs, fontWeight: '700', color: colors.primary },
   headerCenter: { flex: 1, alignItems: 'center' },
-  pageIndicator: { fontSize: Colors.font.sm, color: colors.textMuted, fontWeight: '500' },
+  pageLabel: { fontSize: Colors.font.sm, color: colors.textMuted, fontWeight: '500' },
   headerRight: { flexDirection: 'row', gap: 6, alignItems: 'center', flex: 1, justifyContent: 'flex-end' },
   headerBtn: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.inputBg },
-  saveBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: Colors.radius.full,
-  },
-  saveBtnText: { fontSize: Colors.font.sm, fontWeight: '700' },
-  canvasWrapper: { flex: 1, position: 'relative' },
+  saveBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 99 },
+  saveBtnTxt: { fontSize: Colors.font.sm, fontWeight: '700' },
+  canvasWrap: { flex: 1 },
   exitFull: {
     position: 'absolute', right: 16, zIndex: 100,
-    backgroundColor: colors.surface + 'dd',
-    borderRadius: 12, padding: 10,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2, shadowRadius: 6,
+    backgroundColor: colors.surface + 'dd', borderRadius: 12, padding: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 6,
   },
-  fullscreenStrokeCount: {
-    position: 'absolute', top: 12, left: 12,
-    backgroundColor: colors.surface + 'cc',
-    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6,
-  },
-  fullscreenStrokeText: { fontSize: Colors.font.sm, color: colors.textMuted, fontWeight: '500' },
-  zoomBadge: {
-    position: 'absolute', bottom: 12, right: 12,
-    backgroundColor: colors.surface + 'cc',
-    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
-  },
-  zoomText: { fontSize: 11, color: colors.primary, fontWeight: '700' },
-  mainToolbar: {
+  toolbar: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 8,
+    paddingHorizontal: 10, paddingVertical: 8,
     backgroundColor: colors.surface,
     borderTopWidth: 1, borderTopColor: colors.border,
-    gap: 4, minHeight: 62,
+    gap: 4, minHeight: 60,
   },
-  toolbarLeft: { flexDirection: 'row', gap: 4, flex: 1 },
-  toolbarCenter: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1.5, justifyContent: 'center' },
-  toolbarRight: { flexDirection: 'row', gap: 4, flex: 1, justifyContent: 'flex-end' },
-  toolBtn: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.inputBg },
-  toolBtnActive: { backgroundColor: colors.primary },
-  toolBtnDisabled: { opacity: 0.35 },
-  activePenBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: colors.inputBg, borderRadius: 10,
-    paddingHorizontal: 10, paddingVertical: 8,
-  },
-  colorDot: {
-    width: 30, height: 30, borderRadius: 15,
-    borderWidth: 2.5, borderColor: colors.border,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2, shadowRadius: 3,
-  },
-  widthBtn: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.inputBg },
-  widthDot: {},
+  tbLeft: { flexDirection: 'row', gap: 4, flex: 1 },
+  tbCenter: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1.4, justifyContent: 'center' },
+  tbRight: { flexDirection: 'row', gap: 4, flex: 1, justifyContent: 'flex-end' },
+  tbBtn: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.inputBg },
+  tbBtnActive: { backgroundColor: colors.primary },
+  tbBtnDim: { opacity: 0.35 },
+  activePenBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.inputBg, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  colorDot: { width: 30, height: 30, borderRadius: 15, borderWidth: 2.5 },
   sizePanel: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    padding: 16, borderTopWidth: 1, borderTopColor: colors.border,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 8,
   },
-  sizePanelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  panelTitle: { fontSize: Colors.font.base, fontWeight: '700', color: colors.text },
-  panelSubtitle: { fontSize: Colors.font.sm, fontWeight: '600', color: colors.textSecondary, marginBottom: 10 },
-  sizePreview: { alignItems: 'center', height: 50, justifyContent: 'center', marginBottom: 12 },
-  sizePreviewLine: { minWidth: 40 },
-  sizeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
-  sizeBtn: { width: 54, height: 60, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.inputBg, gap: 4 },
-  sizeBtnActive: { backgroundColor: colors.primarySoft, borderWidth: 2, borderColor: colors.primary },
-  sizeDot: {},
-  sizeBtnLabel: { fontSize: 10, color: colors.textMuted, fontWeight: '500' },
-  opacityRow: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12 },
-  opacityBtns: { flexDirection: 'row', gap: 8 },
-  opacityBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 10, backgroundColor: colors.inputBg, gap: 4 },
-  opacityBtnActive: { backgroundColor: colors.primarySoft, borderWidth: 1.5, borderColor: colors.primary },
-  opacityDot: { width: 24, height: 24, borderRadius: 12 },
-  opacityLabel: { fontSize: 10, color: colors.textMuted, fontWeight: '500' },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: {
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40,
-    maxHeight: SCREEN_H * 0.8,
+    maxHeight: SCREEN_H * 0.82,
   },
-  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 16 },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 16 },
   sheetTitle: { fontSize: Colors.font.xl, fontWeight: '800', marginBottom: 16 },
   toolGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  toolGridBtn: { width: (SCREEN_W - 60) / 3, alignItems: 'center', padding: 12, borderRadius: 16, backgroundColor: colors.inputBg, gap: 6 },
+  toolGridBtn: {
+    width: (SCREEN_W - 60) / 3, alignItems: 'center', padding: 12,
+    borderRadius: 16, backgroundColor: colors.inputBg, gap: 5,
+  },
   toolGridBtnActive: { backgroundColor: colors.primarySoft, borderWidth: 2, borderColor: colors.primary },
-  toolGridIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card },
-  toolGridLabel: { fontSize: Colors.font.sm, fontWeight: '700' },
-  toolGridDesc: { fontSize: 10, color: colors.textMuted, textAlign: 'center' },
-  currentColorRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16, padding: 12, backgroundColor: colors.inputBg, borderRadius: 14 },
-  currentColorSwatch: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: colors.border },
-  currentColorLabel: { fontSize: Colors.font.base, fontWeight: '600' },
-  colorSectionLabel: { fontSize: Colors.font.sm, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10, marginTop: 4 },
-  colorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
-  colorGridSmall: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
-  colorSwatch: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
-  colorSwatchSm: { width: 30, height: 30, borderRadius: 15 },
-  colorSwatchActive: { borderWidth: 3, borderColor: colors.primary },
+  toolGridIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   templateGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   templateBtn: {
-    width: (SCREEN_W - 64) / 3,
-    padding: 12, borderRadius: 16,
+    width: (SCREEN_W - 64) / 3, padding: 12, borderRadius: 16,
     alignItems: 'center', gap: 6,
-    backgroundColor: colors.inputBg,
-    borderWidth: 1.5, borderColor: 'transparent',
-    position: 'relative',
+    borderWidth: 1.5, borderColor: 'transparent', position: 'relative',
   },
-  templateIcon: { width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  templateName: { fontSize: 11, fontWeight: '600', textAlign: 'center' },
-  templateCheck: {
-    position: 'absolute', top: 6, right: 6,
-    width: 18, height: 18, borderRadius: 9,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  pageInfo: { alignItems: 'center', paddingVertical: 20, gap: 8 },
-  pageInfoTitle: { fontSize: Colors.font.xl, fontWeight: '700' },
-  pageInfoSub: { fontSize: Colors.font.sm },
-  pageActions: { gap: 10 },
-  pageActionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16, borderRadius: 16 },
-  pageActionText: { color: '#fff', fontWeight: '700', fontSize: Colors.font.base },
 });
