@@ -26,6 +26,36 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 type ViewMode = 'edit' | 'preview' | 'draw';
 type FormatCategory = 'text' | 'insert' | 'list' | 'callout' | 'style';
 
+type SlashCommand = {
+  id: string; label: string; icon: string; desc: string; keywords: string[];
+  action: string | (() => void);
+};
+
+const SLASH_COMMANDS: SlashCommand[] = [
+  { id: 'h1',        label: 'Heading 1',       icon: 'format-header-1',         desc: 'Large section heading',       keywords: ['h1','heading','title','big'],     action: '# ' },
+  { id: 'h2',        label: 'Heading 2',       icon: 'format-header-2',         desc: 'Medium section heading',      keywords: ['h2','heading','subtitle'],        action: '## ' },
+  { id: 'h3',        label: 'Heading 3',       icon: 'format-header-3',         desc: 'Small section heading',       keywords: ['h3','heading','sub'],             action: '### ' },
+  { id: 'bullet',    label: 'Bullet List',     icon: 'format-list-bulleted',    desc: 'Simple bullet list',          keywords: ['bullet','list','ul'],             action: '- ' },
+  { id: 'numbered',  label: 'Numbered List',   icon: 'format-list-numbered',    desc: 'Ordered numbered list',       keywords: ['numbered','ordered','ol','1'],    action: '1. ' },
+  { id: 'todo',      label: 'Todo / Task',     icon: 'checkbox-blank-outline',  desc: 'Trackable checkbox task',     keywords: ['todo','task','check','checkbox'], action: '- [ ] ' },
+  { id: 'quote',     label: 'Quote',           icon: 'format-quote-open',       desc: 'Capture a quote or excerpt',  keywords: ['quote','blockquote','bq'],        action: '> ' },
+  { id: 'divider',   label: 'Divider',         icon: 'minus',                   desc: 'Horizontal rule divider',     keywords: ['divider','hr','line','rule'],     action: '---\n' },
+  { id: 'table',     label: 'Table',           icon: 'table',                   desc: '3-column table',              keywords: ['table','grid','col','row'],       action: '| Col 1 | Col 2 | Col 3 |\n|-------|-------|-------|\n|       |       |       |\n' },
+  { id: 'code',      label: 'Code Block',      icon: 'code-block',              desc: 'Monospace code with syntax',  keywords: ['code','codeblock','pre','js'],    action: '```javascript\n// code here\n```\n' },
+  { id: 'tip',       label: 'Tip Callout',     icon: 'lightbulb-outline',       desc: '💡 Highlighted tip',          keywords: ['tip','callout','lightbulb'],      action: '> 💡 ' },
+  { id: 'warning',   label: 'Warning',         icon: 'alert-outline',           desc: '⚠️ Warning callout',         keywords: ['warning','alert','caution'],      action: '> ⚠️ ' },
+  { id: 'info',      label: 'Info',            icon: 'information-outline',     desc: 'ℹ️ Info callout box',         keywords: ['info','information','note'],      action: '> ℹ️ ' },
+  { id: 'success',   label: 'Success',         icon: 'check-circle-outline',    desc: '✅ Success callout',          keywords: ['success','done','check','ok'],    action: '> ✅ ' },
+  { id: 'error',     label: 'Error / Danger',  icon: 'close-circle-outline',    desc: '❌ Error or danger',          keywords: ['error','danger','fail'],          action: '> ❌ ' },
+  { id: 'important', label: 'Important',       icon: 'fire',                    desc: '🔥 Important callout',        keywords: ['important','fire','hot'],         action: '> 🔥 ' },
+  { id: 'math',      label: 'Math Block',      icon: 'function-variant',        desc: 'LaTeX math equation',         keywords: ['math','latex','equation','$$'],   action: '$$\n\n$$\n' },
+  { id: 'image',     label: 'Image',           icon: 'image-outline',           desc: 'Embed an image by URL',       keywords: ['image','img','photo','picture'],  action: '![alt text](https://)\n' },
+  { id: 'bold',      label: 'Bold Text',       icon: 'format-bold',             desc: '**Bold** inline text',        keywords: ['bold','strong','b'],              action: '**bold**' },
+  { id: 'italic',    label: 'Italic Text',     icon: 'format-italic',           desc: '*Italic* inline text',        keywords: ['italic','em','i'],                action: '*italic*' },
+  { id: 'highlight', label: 'Highlight',       icon: 'marker',                  desc: '===highlight=== text',        keywords: ['highlight','mark','yellow'],      action: '===highlighted===' },
+  { id: 'date',      label: 'Today\'s Date',   icon: 'calendar-today',          desc: 'Insert today\'s date',        keywords: ['date','today','now','time'],      action: `**${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}**` },
+];
+
 // ─── Page background helpers ──────────────────────────────────────────────────
 function getPageBg(bg: PageBackground, isDark: boolean): string {
   const found = PAGE_BACKGROUNDS.find(p => p.id === bg);
@@ -325,6 +355,13 @@ export default function NoteEditorScreen() {
   const [linkUrl, setLinkUrl] = useState('');
   const [formatCat, setFormatCat] = useState<FormatCategory>('text');
   const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [slashQuery, setSlashQuery] = useState('');
+  const [slashStartPos, setSlashStartPos] = useState(0);
+  const [showSearchReplace, setShowSearchReplace] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [replaceQuery, setReplaceQuery] = useState('');
+  const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
 
   const contentRef = useRef<TextInput>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -368,7 +405,23 @@ export default function NoteEditorScreen() {
   }, [doSave, settings.autoSave]);
 
   const handleTitleChange = (t: string) => { setTitle(t); scheduleAutoSave(t, content); };
-  const handleContentChange = (c: string) => { setContent(c); scheduleAutoSave(title, c); };
+  const handleContentChange = (c: string) => {
+    setContent(c);
+    scheduleAutoSave(title, c);
+    // Slash command detection — estimate cursor position
+    const delta = c.length - content.length;
+    const estimatedPos = Math.min(c.length, Math.max(0, selection.start + delta));
+    const textBefore = c.slice(0, estimatedPos);
+    const lastNewline = textBefore.lastIndexOf('\n');
+    const currentLine = textBefore.slice(lastNewline + 1);
+    if (currentLine.startsWith('/') && !currentLine.includes(' ') && currentLine.length <= 30) {
+      setSlashStartPos(lastNewline + 1);
+      setSlashQuery(currentLine.slice(1).toLowerCase());
+      setShowSlashMenu(true);
+    } else if (showSlashMenu) {
+      setShowSlashMenu(false);
+    }
+  };
 
   const handleBack = async () => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -396,6 +449,65 @@ export default function NoteEditorScreen() {
     scheduleAutoSave(title, newContent);
     setTimeout(() => contentRef.current?.focus(), 50);
   }, [content, title, scheduleAutoSave]);
+
+  // ── Slash command execution ───────────────────────────────────────────────
+  const executeSlashCommand = useCallback((cmd: SlashCommand) => {
+    const actionStr = typeof cmd.action === 'string' ? cmd.action : '';
+    const lineEnd = content.indexOf('\n', slashStartPos);
+    const removeEnd = lineEnd === -1 ? content.length : lineEnd;
+    const newContent = content.slice(0, slashStartPos) + actionStr + content.slice(removeEnd);
+    setContent(newContent);
+    scheduleAutoSave(title, newContent);
+    setShowSlashMenu(false);
+    setSlashQuery('');
+    haptic.success();
+    setTimeout(() => contentRef.current?.focus(), 80);
+  }, [content, slashStartPos, title, scheduleAutoSave]);
+
+  const filteredSlashCmds = useMemo(() => {
+    if (!slashQuery) return SLASH_COMMANDS;
+    const q = slashQuery.toLowerCase();
+    return SLASH_COMMANDS.filter(cmd =>
+      cmd.label.toLowerCase().includes(q) ||
+      cmd.keywords.some(k => k.includes(q))
+    );
+  }, [slashQuery]);
+
+  // ── Search & Replace ──────────────────────────────────────────────────────
+  const searchMatchCount = useMemo(() => {
+    if (!searchQuery.trim()) return 0;
+    try {
+      const flags = searchCaseSensitive ? 'g' : 'gi';
+      const re = new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+      return (content.match(re) || []).length;
+    } catch { return 0; }
+  }, [searchQuery, content, searchCaseSensitive]);
+
+  const handleReplaceAll = () => {
+    if (!searchQuery.trim()) return;
+    try {
+      const flags = searchCaseSensitive ? 'g' : 'gi';
+      const re = new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+      const newContent = content.replace(re, replaceQuery);
+      setContent(newContent);
+      scheduleAutoSave(title, newContent);
+      haptic.success();
+      Alert.alert('Replaced ✅', `Replaced ${searchMatchCount} occurrence${searchMatchCount !== 1 ? 's' : ''}.`);
+    } catch (e: any) { Alert.alert('Error', 'Invalid search pattern.'); }
+  };
+
+  const handleReplaceFirst = () => {
+    if (!searchQuery.trim()) return;
+    try {
+      const flags = searchCaseSensitive ? '' : 'i';
+      const re = new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+      const newContent = content.replace(re, replaceQuery);
+      if (newContent === content) { Alert.alert('Not found', `"${searchQuery}" not found.`); return; }
+      setContent(newContent);
+      scheduleAutoSave(title, newContent);
+      haptic.success();
+    } catch { Alert.alert('Error', 'Invalid search pattern.'); }
+  };
 
   // ── Toggle checkbox in preview ────────────────────────────────────────────
   const handleToggleCheck = useCallback((lineIdx: number) => {
@@ -663,6 +775,56 @@ export default function NoteEditorScreen() {
             ))}
           </ScrollView>
         </View>
+      )}
+
+      {/* ── Slash Command Menu ─────────────────────────────────────────────── */}
+      {showSlashMenu && viewMode === 'edit' && !focusMode && (
+        <Animated.View entering={FadeIn.duration(120)} style={{
+          maxHeight: 280, borderBottomWidth: 1, borderBottomColor: colors.border,
+          backgroundColor: colors.surface,
+          shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 8,
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 8, paddingBottom: 4, gap: 8 }}>
+            <View style={{ width: 22, height: 22, borderRadius: 6, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ color: '#fff', fontWeight: '900', fontSize: 13 }}>/</Text>
+            </View>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary }}>
+              {slashQuery ? `"${slashQuery}" — ${filteredSlashCmds.length} command${filteredSlashCmds.length !== 1 ? 's' : ''}` : 'Type to filter commands…'}
+            </Text>
+            <TouchableOpacity onPress={() => setShowSlashMenu(false)} style={{ marginLeft: 'auto' as any }}>
+              <MaterialCommunityIcons name="close" size={15} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+          {filteredSlashCmds.length === 0 ? (
+            <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+              <Text style={{ color: colors.textMuted, fontSize: 13 }}>No commands match "{slashQuery}"</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredSlashCmds}
+              keyExtractor={c => c.id}
+              keyboardShouldPersistTaps="always"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 8 }}
+              renderItem={({ item: cmd }) => (
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, gap: 12 }}
+                  onPress={() => executeSlashCommand(cmd)}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
+                    <MaterialCommunityIcons name={cmd.icon as any} size={18} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>{cmd.label}</Text>
+                    <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 1 }}>{cmd.desc}</Text>
+                  </View>
+                  <MaterialCommunityIcons name="arrow-right" size={14} color={colors.textMuted} />
+                </TouchableOpacity>
+              )}
+            />
+          )}
+        </Animated.View>
       )}
 
       {/* ── Tags Row ───────────────────────────────────────────────────────── */}
@@ -991,6 +1153,90 @@ export default function NoteEditorScreen() {
               </View>
               <View style={{ height: 30 }} />
             </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── Search & Replace Modal ───────────────────────────────────────── */}
+      <Modal visible={showSearchReplace} transparent animationType="slide">
+        <Pressable style={styles.overlay} onPress={() => setShowSearchReplace(false)}>
+          <Pressable style={[styles.sheet, { backgroundColor: colors.surface, maxHeight: 420 }]} onPress={() => {}}>
+            <View style={styles.sheetHandle} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text }}>Find & Replace</Text>
+              {searchQuery.trim() ? (
+                <View style={{ backgroundColor: colors.primarySoft, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: colors.primary }}>
+                    {searchMatchCount} match{searchMatchCount !== 1 ? 'es' : ''}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            <View style={{ gap: 12, marginBottom: 16 }}>
+              <View>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: colors.textMuted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Find</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.inputBg, borderRadius: 12, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, gap: 8 }}>
+                  <MaterialCommunityIcons name="magnify" size={18} color={colors.textMuted} />
+                  <TextInput
+                    style={{ flex: 1, fontSize: 15, color: colors.text, paddingVertical: 12 }}
+                    placeholder="Search text…"
+                    placeholderTextColor={colors.textMuted}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    autoFocus
+                    autoCapitalize="none"
+                  />
+                  {searchQuery ? (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                      <MaterialCommunityIcons name="close-circle" size={16} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </View>
+
+              <View>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: colors.textMuted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Replace With</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.inputBg, borderRadius: 12, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, gap: 8 }}>
+                  <MaterialCommunityIcons name="pencil-outline" size={18} color={colors.textMuted} />
+                  <TextInput
+                    style={{ flex: 1, fontSize: 15, color: colors.text, paddingVertical: 12 }}
+                    placeholder="Replace with…"
+                    placeholderTextColor={colors.textMuted}
+                    value={replaceQuery}
+                    onChangeText={setReplaceQuery}
+                    autoCapitalize="none"
+                  />
+                </View>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14, paddingVertical: 4 }}
+              onPress={() => setSearchCaseSensitive(v => !v)}
+            >
+              <View style={{ width: 20, height: 20, borderRadius: 5, borderWidth: 2, borderColor: searchCaseSensitive ? colors.primary : colors.border, backgroundColor: searchCaseSensitive ? colors.primary : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                {searchCaseSensitive && <MaterialCommunityIcons name="check" size={12} color="#fff" />}
+              </View>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary }}>Case sensitive</Text>
+            </TouchableOpacity>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                style={{ flex: 1, padding: 14, borderRadius: 14, backgroundColor: searchQuery.trim() ? colors.inputBg : colors.border, alignItems: 'center' }}
+                onPress={handleReplaceFirst}
+                disabled={!searchQuery.trim() || searchMatchCount === 0}
+              >
+                <Text style={{ fontWeight: '700', color: searchQuery.trim() ? colors.textSecondary : colors.textMuted, fontSize: 14 }}>Replace First</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, padding: 14, borderRadius: 14, backgroundColor: (searchQuery.trim() && searchMatchCount > 0) ? colors.primary : colors.border, alignItems: 'center' }}
+                onPress={handleReplaceAll}
+                disabled={!searchQuery.trim() || searchMatchCount === 0}
+              >
+                <Text style={{ fontWeight: '800', color: '#fff', fontSize: 14 }}>Replace All {searchMatchCount > 0 ? `(${searchMatchCount})` : ''}</Text>
+              </TouchableOpacity>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
