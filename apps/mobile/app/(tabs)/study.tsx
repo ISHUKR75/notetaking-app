@@ -110,6 +110,8 @@ export default function StudyScreen() {
   const [showHint, setShowHint] = useState(false);
   const [mcChoices, setMcChoices] = useState<string[]>([]);
   const [mcSelected, setMcSelected] = useState<string | null>(null);
+  const [expandedDeckId, setExpandedDeckId] = useState<string | null>(null);
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
 
   // Pomodoro
   const [pomodoroActive, setPomodoroActive] = useState(false);
@@ -368,42 +370,115 @@ export default function StudyScreen() {
           {decks.map((deck, i) => {
             const dc = cards.filter(c => c.deckId === deck.id);
             const prog = dc.length > 0 ? dc.filter(c => c.mastered).length / dc.length : 0;
+            const isExpanded = expandedDeckId === deck.id;
             return (
               <Animated.View key={deck.id} entering={FadeInDown.delay(i * 60).springify()}>
-                <TouchableOpacity
-                  style={{ backgroundColor:colors.card, borderRadius:20, padding:16, marginBottom:12, borderWidth:1, borderColor:colors.border, shadowColor:'#000', shadowOffset:{width:0,height:2}, shadowOpacity:0.07, shadowRadius:8, elevation:2 }}
-                  onLongPress={() => deleteDeck(deck.id)}
-                  activeOpacity={0.85}
-                >
-                  <View style={{ flexDirection:'row', alignItems:'center', gap:14 }}>
-                    <View style={{ width:52, height:52, borderRadius:16, backgroundColor:deck.color+'20', alignItems:'center', justifyContent:'center' }}>
-                      <Text style={{ fontSize:26 }}>{deck.emoji}</Text>
-                    </View>
-                    <View style={{ flex:1 }}>
-                      <Text style={{ fontSize:Colors.font.base, fontWeight:'800', color:colors.text }}>{deck.name}</Text>
-                      {!!deck.description && <Text style={{ fontSize:Colors.font.sm, color:colors.textSecondary, marginTop:1 }} numberOfLines={1}>{deck.description}</Text>}
-                      <View style={{ flexDirection:'row', gap:12, marginTop:5 }}>
-                        <Text style={{ fontSize:Colors.font.xs, color:colors.textMuted, fontWeight:'600' }}>{dc.length} cards</Text>
-                        <Text style={{ fontSize:Colors.font.xs, color:'#10b981', fontWeight:'600' }}>{dc.filter(c=>c.mastered).length} mastered</Text>
-                        {deck.streak > 0 && <Text style={{ fontSize:Colors.font.xs, color:'#f59e0b', fontWeight:'600' }}>🔥 {deck.streak}d</Text>}
+                <View style={{ backgroundColor:colors.card, borderRadius:20, marginBottom:12, borderWidth:1, borderColor:colors.border, shadowColor:'#000', shadowOffset:{width:0,height:2}, shadowOpacity:0.07, shadowRadius:8, elevation:2, overflow:'hidden' }}>
+                  {/* Deck header */}
+                  <TouchableOpacity
+                    style={{ padding:16 }}
+                    onLongPress={() => deleteDeck(deck.id)}
+                    activeOpacity={0.85}
+                  >
+                    <View style={{ flexDirection:'row', alignItems:'center', gap:14 }}>
+                      <View style={{ width:52, height:52, borderRadius:16, backgroundColor:deck.color+'20', alignItems:'center', justifyContent:'center' }}>
+                        <Text style={{ fontSize:26 }}>{deck.emoji}</Text>
                       </View>
+                      <View style={{ flex:1 }}>
+                        <Text style={{ fontSize:Colors.font.base, fontWeight:'800', color:colors.text }}>{deck.name}</Text>
+                        {!!deck.description && <Text style={{ fontSize:Colors.font.sm, color:colors.textSecondary, marginTop:1 }} numberOfLines={1}>{deck.description}</Text>}
+                        <View style={{ flexDirection:'row', gap:12, marginTop:5 }}>
+                          <Text style={{ fontSize:Colors.font.xs, color:colors.textMuted, fontWeight:'600' }}>{dc.length} cards</Text>
+                          <Text style={{ fontSize:Colors.font.xs, color:'#10b981', fontWeight:'600' }}>{dc.filter(c=>c.mastered).length} mastered</Text>
+                          {deck.streak > 0 && <Text style={{ fontSize:Colors.font.xs, color:'#f59e0b', fontWeight:'600' }}>🔥 {deck.streak}d</Text>}
+                        </View>
+                      </View>
+                      <TouchableOpacity style={{ backgroundColor:deck.color, borderRadius:12, paddingHorizontal:14, paddingVertical:8 }} onPress={() => startReview(deck)}>
+                        <Text style={{ color:'#fff', fontWeight:'700', fontSize:Colors.font.sm }}>Study</Text>
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity style={{ backgroundColor:deck.color, borderRadius:12, paddingHorizontal:14, paddingVertical:8 }} onPress={() => startReview(deck)}>
-                      <Text style={{ color:'#fff', fontWeight:'700', fontSize:Colors.font.sm }}>Study</Text>
-                    </TouchableOpacity>
-                  </View>
+                    {dc.length > 0 && (
+                      <View style={{ marginTop:12 }}>
+                        <View style={{ flexDirection:'row', justifyContent:'space-between', marginBottom:5 }}>
+                          <Text style={{ fontSize:Colors.font.xs, color:colors.textMuted, fontWeight:'600' }}>Progress</Text>
+                          <Text style={{ fontSize:Colors.font.xs, color:deck.color, fontWeight:'700' }}>{Math.round(prog * 100)}%</Text>
+                        </View>
+                        <View style={{ height:6, backgroundColor:colors.border, borderRadius:3, overflow:'hidden' }}>
+                          <View style={{ height:'100%', borderRadius:3, backgroundColor:deck.color, width:`${prog * 100}%` }} />
+                        </View>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+
+                  {/* Expand/collapse cards button */}
                   {dc.length > 0 && (
-                    <View style={{ marginTop:12 }}>
-                      <View style={{ flexDirection:'row', justifyContent:'space-between', marginBottom:5 }}>
-                        <Text style={{ fontSize:Colors.font.xs, color:colors.textMuted, fontWeight:'600' }}>Progress</Text>
-                        <Text style={{ fontSize:Colors.font.xs, color:deck.color, fontWeight:'700' }}>{Math.round(prog * 100)}%</Text>
-                      </View>
-                      <View style={{ height:6, backgroundColor:colors.border, borderRadius:3, overflow:'hidden' }}>
-                        <View style={{ height:'100%', borderRadius:3, backgroundColor:deck.color, width:`${prog * 100}%` }} />
-                      </View>
-                    </View>
+                    <TouchableOpacity
+                      style={{ flexDirection:'row', alignItems:'center', justifyContent:'center', gap:5, paddingVertical:10, borderTopWidth:1, borderTopColor:colors.border, backgroundColor:colors.inputBg }}
+                      onPress={() => { setExpandedDeckId(isExpanded ? null : deck.id); setExpandedCardId(null); haptic.select(); }}
+                    >
+                      <MaterialCommunityIcons name={isExpanded ? 'chevron-up' : 'cards-outline'} size={15} color={colors.textSecondary} />
+                      <Text style={{ fontSize:12, fontWeight:'700', color:colors.textSecondary }}>
+                        {isExpanded ? 'Hide cards' : `Browse ${dc.length} card${dc.length !== 1 ? 's' : ''}`}
+                      </Text>
+                    </TouchableOpacity>
                   )}
-                </TouchableOpacity>
+
+                  {/* Inline card list */}
+                  {isExpanded && dc.length > 0 && (
+                    <Animated.View entering={FadeIn.duration(200)} style={{ borderTopWidth:1, borderTopColor:colors.border }}>
+                      {dc.map((card, ci) => {
+                        const isCardExpanded = expandedCardId === card.id;
+                        const diffColors: Record<string,string> = { easy:'#10b981', good:'#3b82f6', hard:'#f59e0b', again:'#ef4444' };
+                        const dc_ = diffColors[card.difficulty] || colors.textMuted;
+                        return (
+                          <TouchableOpacity
+                            key={card.id}
+                            style={{ padding:14, borderBottomWidth: ci < dc.length - 1 ? 1 : 0, borderBottomColor:colors.border + '88' }}
+                            onPress={() => { setExpandedCardId(isCardExpanded ? null : card.id); haptic.select(); }}
+                            onLongPress={() => { Alert.alert('Delete Card?', `"${card.front}"`, [{ text:'Delete', style:'destructive', onPress:() => deleteCard(card.id, deck.id) }, { text:'Cancel', style:'cancel' }]); }}
+                          >
+                            <View style={{ flexDirection:'row', alignItems:'flex-start', gap:10 }}>
+                              <View style={{ width:8, height:8, borderRadius:4, backgroundColor:dc_, marginTop:5 }} />
+                              <View style={{ flex:1 }}>
+                                <Text style={{ fontSize:Colors.font.sm, fontWeight:'700', color:colors.text, lineHeight:20 }}>{card.front}</Text>
+                                {isCardExpanded && (
+                                  <Animated.View entering={FadeInDown.duration(150)}>
+                                    <View style={{ height:1, backgroundColor:colors.border, marginVertical:8 }} />
+                                    <Text style={{ fontSize:Colors.font.sm, color:colors.textSecondary, lineHeight:20 }}>{card.back}</Text>
+                                    {card.hint && (
+                                      <View style={{ flexDirection:'row', gap:6, marginTop:8, backgroundColor:'#fef3c7', borderRadius:8, padding:8, alignItems:'flex-start' }}>
+                                        <MaterialCommunityIcons name="lightbulb-outline" size={13} color='#f59e0b' />
+                                        <Text style={{ flex:1, fontSize:11, color:'#92400e' }}>{card.hint}</Text>
+                                      </View>
+                                    )}
+                                    <View style={{ flexDirection:'row', alignItems:'center', gap:8, marginTop:10 }}>
+                                      <View style={{ backgroundColor:dc_+'22', borderRadius:8, paddingHorizontal:8, paddingVertical:3 }}>
+                                        <Text style={{ fontSize:10, fontWeight:'700', color:dc_, textTransform:'uppercase' }}>{card.difficulty}</Text>
+                                      </View>
+                                      <Text style={{ fontSize:10, color:colors.textMuted }}>reviewed {card.reviewCount}×</Text>
+                                      {card.mastered && <View style={{ backgroundColor:'#f0fdf4', borderRadius:8, paddingHorizontal:8, paddingVertical:3 }}><Text style={{ fontSize:10, fontWeight:'700', color:'#16a34a' }}>✓ mastered</Text></View>}
+                                      {card.tags.map(t => <View key={t} style={{ backgroundColor:colors.primarySoft, borderRadius:8, paddingHorizontal:7, paddingVertical:2 }}><Text style={{ fontSize:10, color:colors.primary }}>#{t}</Text></View>)}
+                                    </View>
+                                  </Animated.View>
+                                )}
+                              </View>
+                              <MaterialCommunityIcons name={isCardExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+
+                      {/* Add card to this deck */}
+                      <TouchableOpacity
+                        style={{ flexDirection:'row', alignItems:'center', gap:6, padding:14, borderTopWidth:1, borderTopColor:colors.border + '88' }}
+                        onPress={() => { setNewCardDeck(deck.id); setShowCreateCard(true); haptic.light(); }}
+                      >
+                        <MaterialCommunityIcons name="plus-circle-outline" size={18} color={deck.color} />
+                        <Text style={{ fontSize:Colors.font.sm, fontWeight:'700', color:deck.color }}>Add card to {deck.name}</Text>
+                      </TouchableOpacity>
+                    </Animated.View>
+                  )}
+                </View>
               </Animated.View>
             );
           })}

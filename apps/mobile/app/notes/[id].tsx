@@ -19,7 +19,7 @@ import { Storage, STORAGE_KEYS } from '../../src/utils/storage';
 import { formatFullDate, formatTime, formatRelativeDate } from '../../src/utils/dateUtils';
 import { NOTE_COLORS, getNoteColorHex } from '../../src/utils/noteUtils';
 import { Stroke } from '../../src/context/DrawingContext';
-import { shareNote, exportNoteAsMarkdown, exportNoteAsText, exportNotesToJSON } from '../../src/utils/exportImport';
+import { shareNote, exportNoteAsMarkdown, exportNoteAsText, exportNoteAsHTML, exportNotesToJSON } from '../../src/utils/exportImport';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -557,29 +557,33 @@ export default function NoteEditorScreen() {
 
   const handleExport = () => {
     if (!note) return;
+    const n = { ...note, title, content };
     Alert.alert('Export Note', 'Choose export format:', [
       {
         text: '📦 JSON Backup', onPress: async () => {
           try {
-            const r = await exportNotesToJSON(
-              [{ ...note, title, content }] as any,
-              [] as any, [] as any, false
-            );
+            const r = await exportNotesToJSON([n] as any, [] as any, [] as any, false);
             Alert.alert('Export', r.message || 'Exported!');
           } catch (e: any) { Alert.alert('Error', e?.message); }
-        }
+        },
+      },
+      {
+        text: '🌐 HTML Page', onPress: async () => {
+          const r = await exportNoteAsHTML(n as any);
+          Alert.alert('Export', r.message || 'Exported!');
+        },
       },
       {
         text: '📄 Markdown (.md)', onPress: async () => {
-          const r = await exportNoteAsMarkdown({ ...note, title, content });
+          const r = await exportNoteAsMarkdown(n as any);
           Alert.alert('Export', r.message || 'Exported!');
-        }
+        },
       },
       {
         text: '📃 Plain Text (.txt)', onPress: async () => {
-          const r = await exportNoteAsText({ ...note, title, content });
+          const r = await exportNoteAsText(n as any);
           Alert.alert('Export', r.message || 'Exported!');
-        }
+        },
       },
       { text: 'Cancel', style: 'cancel' },
     ]);

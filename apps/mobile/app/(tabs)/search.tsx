@@ -66,6 +66,18 @@ function highlightText(text: string, query: string, style: any, highlightStyle: 
   );
 }
 
+function getContentSnippet(content: string, query: string, maxLen = 130): string {
+  if (!query.trim()) return content.replace(/\n/g, ' ').slice(0, maxLen);
+  const q = query.toLowerCase();
+  const flat = content.replace(/\n/g, ' ');
+  const idx = flat.toLowerCase().indexOf(q);
+  if (idx === -1) return flat.slice(0, maxLen);
+  const start = Math.max(0, idx - 40);
+  const end = Math.min(flat.length, idx + q.length + 80);
+  const snippet = (start > 0 ? '…' : '') + flat.slice(start, end) + (end < flat.length ? '…' : '');
+  return snippet;
+}
+
 export default function SearchScreen() {
   const router = useRouter();
   const { colors } = useTheme();
@@ -406,10 +418,10 @@ export default function SearchScreen() {
                     <View style={{ flex: 1 }}>
                       {highlightText(item.title || 'Untitled', query, { fontSize: Colors.font.base, fontWeight: '700', color: colors.text, marginBottom: 3 }, { backgroundColor: '#fef08a', color: '#78350f' })}
                       {highlightText(
-                        item.content.slice(0, 100).replace(/\n/g, ' '),
+                        getContentSnippet(item.content, query),
                         query,
                         { fontSize: Colors.font.sm, color: colors.textSecondary, lineHeight: 18 },
-                        { backgroundColor: '#fef08a', color: '#78350f' },
+                        { backgroundColor: '#fef08a', color: '#78350f', borderRadius: 2 },
                       )}
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
                         <Text style={{ fontSize: 10, color: colors.textMuted, fontWeight: '500' }}>

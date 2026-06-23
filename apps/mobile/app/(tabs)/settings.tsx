@@ -12,7 +12,7 @@ import { useTheme, AppSettings } from '../../src/context/ThemeContext';
 import { useNotes } from '../../src/context/NotesContext';
 import { Colors, ThemeColors, THEME_OPTIONS } from '../../src/constants/colors';
 import {
-  exportNotesToJSON, exportAllAsMarkdownZip,
+  exportNotesToJSON, exportAllAsMarkdownZip, exportNoteAsHTML,
   pickAndImportFile,
 } from '../../src/utils/exportImport';
 
@@ -91,8 +91,12 @@ export default function SettingsScreen() {
   const [showFontPicker, setShowFontPicker] = useState(false);
   const [showFontSizePicker, setShowFontSizePicker] = useState(false);
   const [showLineHeightPicker, setShowLineHeightPicker] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importPreview, setImportPreview] = useState<{ count: number; notebookCount: number; data: any } | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [exportDone, setExportDone] = useState<string | null>(null);
 
   const FONT_SIZES = ['small', 'medium', 'large', 'xlarge'] as const;
   const FONT_FAMILIES = [
@@ -139,15 +143,10 @@ export default function SettingsScreen() {
   };
 
   const handleExportOptions = () => {
-    Alert.alert(
-      'Export Notes',
-      `Export ${activeNotes.length} note${activeNotes.length !== 1 ? 's' : ''}:`,
-      [
-        { text: '📦 JSON Backup (full backup, recommended)', onPress: () => handleExport('json') },
-        { text: '📄 All as Markdown', onPress: () => handleExport('markdown') },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    );
+    if (activeNotes.length === 0) {
+      Alert.alert('Nothing to Export', 'You have no notes to export.'); return;
+    }
+    setShowExportModal(true);
   };
 
   const handleImport = async () => {
@@ -162,24 +161,8 @@ export default function SettingsScreen() {
       if (result.type === 'json' && result.data) {
         const bundle = result.data as any;
         if (bundle.notes && Array.isArray(bundle.notes)) {
-          Alert.alert(
-            '📥 Import Backup',
-            `Found ${bundle.notes.length} note${bundle.notes.length !== 1 ? 's' : ''}${bundle.notebooks?.length ? ` in ${bundle.notebooks.length} notebook${bundle.notebooks.length !== 1 ? 's' : ''}` : ''}. Import them all?`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Import All',
-                onPress: async () => {
-                  const { imported, errors } = await importBackup(bundle);
-                  haptic.success();
-                  Alert.alert(
-                    'Import Complete ✅',
-                    `Successfully imported ${imported} note${imported !== 1 ? 's' : ''}!${errors > 0 ? `\n⚠️ ${errors} item${errors !== 1 ? 's' : ''} skipped due to errors.` : ''}`,
-                  );
-                },
-              },
-            ],
-          );
+          setImportPreview({ count: bundle.notes.length, notebookCount: bundle.notebooks?.length || 0, data: bundle });
+          setShowImportModal(true);
         } else {
           Alert.alert('Invalid File', 'This JSON file does not contain a valid Ishu Notes backup.');
         }
@@ -209,6 +192,33 @@ export default function SettingsScreen() {
       Alert.alert('Import Failed', e?.message || 'Unknown error');
     } finally {
       setIsImporting(false);
+    }
+  };
+
+  const doExportFormat = async (format: 'json' | 'markdown') => {
+    setShowExportModal(false);
+    setIsExporting(true);
+    setExportDone(null);
+    haptic.light();
+    try {
+      let result;
+      if (format === 'json') {
+        const bundle = await exportBackup();
+        result = await exportNotesToJSON(bundle.notes as any, bundle.notebooks as any, bundle.tags as any, true);
+      } else {
+        result = await exportAllAsMarkdownZip(activeNotes as any);
+      }
+      if (result.success) {
+        haptic.success();
+        setExportDone(result.message);
+        setTimeout(() => setExportDone(null), 4000);
+      } else {
+        Alert.alert('Export Failed', result.message);
+      }
+    } catch (e: any) {
+      Alert.alert('Export Failed', e?.message || 'Unknown error');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -375,19 +385,19 @@ export default function SettingsScreen() {
             <SettingsItem
               icon="export-variant" iconColor="#3b82f6"
               title={isExporting ? 'Exporting…' : 'Export All Notes'}
-              subtitle="JSON backup, Markdown, or plain text"
+              subtitle={exportDone || `${activeNotes.length} note${activeNotes.length !== 1 ? 's' : ''} · JSON, Markdown, or HTML`}
               onPress={isExporting ? undefined : handleExportOptions}
             />
             <Divider colors={colors} />
             <SettingsItem
               icon="import" iconColor="#10b981"
               title={isImporting ? 'Importing…' : 'Import Notes'}
-              subtitle="From JSON backup or Markdown files"
+              subtitle="From JSON backup, Markdown, or text files"
               onPress={isImporting ? undefined : handleImport}
             />
             <Divider colors={colors} />
             <SettingsItem
-              icon="information-outline" iconColor="#6b7280"
+              icon="database-outline" iconColor="#6b7280"
               title="Storage Info"
               subtitle={`${activeNotes.length} active · ${trashedCount} in trash · ${notebooks.length} notebooks`}
             />
@@ -583,6 +593,136 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </Animated.View>
             ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Export Modal */}
+      <Modal visible={showExportModal} transparent animationType="slide">
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setShowExportModal(false)}>
+          <Pressable style={{ backgroundColor: colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 48 }}>
+            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 20 }} />
+            <Text style={{ fontSize: Colors.font.xl, fontWeight: '900', color: colors.text, marginBottom: 4 }}>Export Notes</Text>
+            <Text style={{ fontSize: Colors.font.sm, color: colors.textSecondary, marginBottom: 20 }}>
+              {activeNotes.length} note{activeNotes.length !== 1 ? 's' : ''} will be exported
+            </Text>
+
+            {[
+              {
+                format: 'json' as const,
+                icon: 'database-export-outline', color: '#3b82f6',
+                title: 'JSON Backup', badge: 'Recommended',
+                desc: 'Full backup including notebooks, tags, and handwriting strokes. Import back anytime.',
+              },
+              {
+                format: 'markdown' as const,
+                icon: 'language-markdown-outline', color: '#8b5cf6',
+                title: 'Markdown (.txt)',
+                desc: 'All notes as Markdown text — compatible with Obsidian, Notion, and any text editor.',
+              },
+            ].map((opt, i) => (
+              <Animated.View key={opt.format} entering={FadeInDown.delay(i * 60).springify()}>
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 14,
+                    padding: 16, borderRadius: 18, marginBottom: 10,
+                    backgroundColor: colors.inputBg,
+                    borderWidth: 1, borderColor: colors.border,
+                  }}
+                  onPress={() => doExportFormat(opt.format)}
+                  activeOpacity={0.8}
+                >
+                  <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: opt.color + '18', alignItems: 'center', justifyContent: 'center' }}>
+                    <MaterialCommunityIcons name={opt.icon as any} size={24} color={opt.color} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                      <Text style={{ fontSize: Colors.font.base, fontWeight: '800', color: colors.text }}>{opt.title}</Text>
+                      {opt.badge && (
+                        <View style={{ backgroundColor: opt.color + '20', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 }}>
+                          <Text style={{ fontSize: 10, fontWeight: '800', color: opt.color }}>{opt.badge}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={{ fontSize: Colors.font.sm, color: colors.textSecondary, lineHeight: 18 }}>{opt.desc}</Text>
+                  </View>
+                  <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textMuted} />
+                </TouchableOpacity>
+              </Animated.View>
+            ))}
+
+            <TouchableOpacity
+              style={{ alignItems: 'center', paddingVertical: 14, marginTop: 4 }}
+              onPress={() => setShowExportModal(false)}
+            >
+              <Text style={{ fontSize: Colors.font.base, color: colors.textMuted, fontWeight: '600' }}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Import Preview Modal */}
+      <Modal visible={showImportModal} transparent animationType="slide">
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setShowImportModal(false)}>
+          <Pressable style={{ backgroundColor: colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 48 }}>
+            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 20 }} />
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+              <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: '#10b98118', alignItems: 'center', justifyContent: 'center' }}>
+                <MaterialCommunityIcons name="file-import-outline" size={28} color="#10b981" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: Colors.font.xl, fontWeight: '900', color: colors.text }}>Import Backup</Text>
+                <Text style={{ fontSize: Colors.font.sm, color: colors.textSecondary, marginTop: 2 }}>Review before importing</Text>
+              </View>
+            </View>
+
+            {importPreview && (
+              <View style={{ backgroundColor: colors.inputBg, borderRadius: 16, padding: 16, marginBottom: 20, gap: 10 }}>
+                {[
+                  { icon: 'note-text-outline', color: '#3b82f6', label: 'Notes', value: importPreview.count },
+                  { icon: 'notebook-outline', color: '#8b5cf6', label: 'Notebooks', value: importPreview.notebookCount },
+                ].map(row => (
+                  <View key={row.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <MaterialCommunityIcons name={row.icon as any} size={20} color={row.color} />
+                    <Text style={{ flex: 1, fontSize: Colors.font.base, color: colors.text, fontWeight: '600' }}>{row.label}</Text>
+                    <View style={{ backgroundColor: row.color + '18', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 4 }}>
+                      <Text style={{ fontSize: Colors.font.base, fontWeight: '800', color: row.color }}>{row.value}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <Text style={{ fontSize: Colors.font.sm, color: colors.textMuted, marginBottom: 20, lineHeight: 20 }}>
+              ⚠️ Imported notes will be added alongside your existing notes. Nothing will be deleted.
+            </Text>
+
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity
+                style={{ flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 14, backgroundColor: colors.inputBg }}
+                onPress={() => { setShowImportModal(false); setImportPreview(null); }}
+              >
+                <Text style={{ fontWeight: '700', color: colors.text }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 2, alignItems: 'center', paddingVertical: 14, borderRadius: 14, backgroundColor: '#10b981', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+                onPress={async () => {
+                  if (!importPreview) return;
+                  setShowImportModal(false);
+                  const { imported, errors } = await importBackup(importPreview.data);
+                  setImportPreview(null);
+                  haptic.success();
+                  Alert.alert(
+                    'Import Complete ✅',
+                    `${imported} note${imported !== 1 ? 's' : ''} imported!${errors > 0 ? `\n${errors} item${errors !== 1 ? 's' : ''} skipped.` : ''}`,
+                  );
+                }}
+              >
+                <MaterialCommunityIcons name="import" size={18} color="#fff" />
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: Colors.font.base }}>Import All</Text>
+              </TouchableOpacity>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
