@@ -9,8 +9,8 @@ import Animated, {
   FadeIn, FadeOut, SlideInDown, SlideOutDown,
   useSharedValue, useAnimatedStyle, withSpring, withTiming,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 import * as KeepAwake from 'expo-keep-awake';
+import { haptic } from '../../src/utils/haptics';
 import { useTheme } from '../../src/context/ThemeContext';
 import { useDrawing } from '../../src/context/DrawingContext';
 import { useNotes } from '../../src/context/NotesContext';
@@ -71,7 +71,7 @@ export default function DrawScreen() {
       return;
     }
     setIsSaving(true);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    haptic.success();
     try {
       const note = await createNote({
         title: `Drawing — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
@@ -93,7 +93,7 @@ export default function DrawScreen() {
   const handleClearAll = () => {
     if (strokes.length === 0) return;
     Alert.alert('Clear Canvas', `This will erase all ${strokes.length} strokes. Continue?`, [
-      { text: 'Clear All', style: 'destructive', onPress: () => { clearAll(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } },
+      { text: 'Clear All', style: 'destructive', onPress: () => { clearAll(); haptic.warning(); } },
       { text: 'Cancel', style: 'cancel' },
     ]);
   };

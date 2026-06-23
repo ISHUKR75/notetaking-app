@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
-import { Colors, ColorScheme, ThemeColors } from '../constants/colors';
+import { Colors, AppTheme, ThemeColors, getThemeColors } from '../constants/colors';
 import { Storage, STORAGE_KEYS } from '../utils/storage';
 
-interface AppSettings {
-  theme: 'light' | 'dark' | 'system';
-  fontSize: 'small' | 'medium' | 'large';
-  noteViewMode: 'list' | 'grid';
-  sortBy: 'modified' | 'created' | 'title';
+export interface AppSettings {
+  theme: AppTheme;
+  fontSize: 'small' | 'medium' | 'large' | 'xlarge';
+  fontFamily: 'inter' | 'serif' | 'mono' | 'dyslexic';
+  noteViewMode: 'list' | 'grid' | 'compact';
+  sortBy: 'modified' | 'created' | 'title' | 'size';
   showWordCount: boolean;
   showTags: boolean;
   enableHaptics: boolean;
@@ -16,11 +17,29 @@ interface AppSettings {
   defaultNotebookId: string | null;
   autoSave: boolean;
   spellCheck: boolean;
+  focusMode: boolean;
+  lineHeight: 'tight' | 'normal' | 'relaxed' | 'loose';
+  enableMarkdown: boolean;
+  showReadingTime: boolean;
+  compactHeaders: boolean;
+  enableSounds: boolean;
+  trashRetentionDays: number;
+  showNoteCount: boolean;
+  gridColumns: 2 | 3;
+  enableBiometricLock: boolean;
+  enableAutoBackup: boolean;
+  defaultPenTool: string;
+  defaultPenColor: string;
+  defaultPenWidth: number;
+  canvasZoom: number;
+  showRuler: boolean;
+  wristRejection: boolean;
 }
 
-const DEFAULT_SETTINGS: AppSettings = {
+export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   fontSize: 'medium',
+  fontFamily: 'inter',
   noteViewMode: 'list',
   sortBy: 'modified',
   showWordCount: true,
@@ -31,17 +50,42 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultNotebookId: null,
   autoSave: true,
   spellCheck: true,
+  focusMode: false,
+  lineHeight: 'normal',
+  enableMarkdown: true,
+  showReadingTime: true,
+  compactHeaders: false,
+  enableSounds: false,
+  trashRetentionDays: 30,
+  showNoteCount: true,
+  gridColumns: 2,
+  enableBiometricLock: false,
+  enableAutoBackup: false,
+  defaultPenTool: 'ballpoint',
+  defaultPenColor: '#111827',
+  defaultPenWidth: 3,
+  canvasZoom: 1,
+  showRuler: false,
+  wristRejection: true,
 };
 
 interface ThemeContextValue {
   colors: ThemeColors;
-  scheme: ColorScheme;
   settings: AppSettings;
   updateSettings: (updates: Partial<AppSettings>) => void;
   isDark: boolean;
+  appTheme: AppTheme;
+  fontScale: number;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+const FONT_SCALES: Record<string, number> = {
+  small: 0.875,
+  medium: 1,
+  large: 1.125,
+  xlarge: 1.25,
+};
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemScheme = useColorScheme();
@@ -55,13 +99,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const scheme: ColorScheme = useMemo(() => {
-    if (settings.theme === 'system') return (systemScheme === 'dark' ? 'dark' : 'light');
-    return settings.theme;
+  const colors = useMemo(() => {
+    return getThemeColors(settings.theme, systemScheme === 'dark');
   }, [settings.theme, systemScheme]);
 
-  const isDark = scheme === 'dark';
-  const colors = isDark ? Colors.dark : Colors.light;
+  const isDark = colors.isDark;
+  const appTheme = settings.theme;
+  const fontScale = FONT_SCALES[settings.fontSize] ?? 1;
 
   const updateSettings = (updates: Partial<AppSettings>) => {
     const newSettings = { ...settings, ...updates };
@@ -72,7 +116,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   if (!loaded) return null;
 
   return (
-    <ThemeContext.Provider value={{ colors, scheme, settings, updateSettings, isDark }}>
+    <ThemeContext.Provider value={{ colors, settings, updateSettings, isDark, appTheme, fontScale }}>
       {children}
     </ThemeContext.Provider>
   );
