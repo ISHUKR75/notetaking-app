@@ -9,3 +9,4 @@
 - [Callout block ordering](callout-ordering.md) — callout checks (💡⚠️ℹ️✅❌📝🔥🚨) MUST come before generic blockquote check in renderMarkdownLine; FormatCategory type now includes 'callout'
 - [Shape tools architecture](shape-tools.md) — shape tool types in PenToolType; DrawingCanvas keeps only [start, current] points for shape tools; PEN_TOOLS.push() appends shape entries after array literal
 - [Study quiz mode](study-quiz.md) — study.tsx has QuizMode type ('flashcard'|'multiChoice'); Flashcard has optional hint field; MC choices generated in useMemo keyed on currentCard.id + quizMode
+- [Drawing canvas architecture](drawing-canvas.md) — web uses HTML5 Canvas overlay (zero React re-renders during live strokes); native uses RAF-batched SVG; pageBgColor must be passed from [id].tsx to DrawingCanvas for correct eraser color

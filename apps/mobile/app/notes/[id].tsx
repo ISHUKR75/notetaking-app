@@ -883,6 +883,7 @@ export default function NoteEditorScreen() {
           <DrawingCanvas
             width={SCREEN_W}
             height={SCREEN_H - topPad - 120 - botPad}
+            pageBgColor={pageBackground !== 'transparent' ? pageBackground : undefined}
           />
           <PenToolbar
             onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
