@@ -5,3 +5,4 @@
 - [NoteCard settings compliance](notecard-settings.md) — NoteCard reads `settings.showTags` and `settings.showWordCount` from `useTheme()` to conditionally show tags/word count
 - [Import/export architecture](import-export.md) — use `importBackup(BackupBundle)` from NotesContext (not exportImport.ts helpers) for full backup import; exportBackup() returns BackupBundle with strokesMap
 - [Page backgrounds](page-backgrounds.md) — PAGE_BACKGROUNDS array has 20 named colors; applied via getPageBg()/getPageTextColor() helpers in [id].tsx; picker opens from format bar palette icon or more menu
+- [Routing canvas tab](routing-canvas.md) — canvas tab is app/(tabs)/index.tsx; root app/index.tsx redirects to /(tabs)/home; use router.navigate('/') not router.push('/(tabs)/') for canvas navigation

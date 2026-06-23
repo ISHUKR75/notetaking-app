@@ -247,9 +247,9 @@ export function NotesProvider({ children }: { children: ReactNode }) {
         if (savedNotebooks && savedNotebooks.length > 0) {
           // Migrate old notes that don't have pageBackground
           const migratedNotes = (savedNotes || []).map(n => ({
-            pageBackground: 'none' as PageBackground,
-            trashedAt: null,
             ...n,
+            pageBackground: n.pageBackground ?? ('none' as PageBackground),
+            trashedAt: n.trashedAt ?? null,
           }));
           setNotebooks(savedNotebooks);
           setNotes(migratedNotes);
