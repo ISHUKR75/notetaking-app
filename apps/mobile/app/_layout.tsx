@@ -33,6 +33,7 @@ function RootLayoutNav() {
         <Stack.Screen name="notes/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
         <Stack.Screen name="notes/create" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
         <Stack.Screen name="notes/templates" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="notes/trash" options={{ headerShown: false, animation: 'slide_from_right' }} />
         <Stack.Screen name="notebooks/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
         <Stack.Screen name="+not-found" />
       </Stack>

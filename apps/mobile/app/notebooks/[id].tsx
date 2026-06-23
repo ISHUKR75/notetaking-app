@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
+import { haptic } from '../../src/utils/haptics';
 import { useTheme } from '../../src/context/ThemeContext';
 import { useNotes, Note } from '../../src/context/NotesContext';
 import { NoteCard } from '../../src/components/NoteCard';
@@ -64,7 +64,7 @@ export default function NotebookDetailScreen() {
           </View>
         </View>
         <View style={s.headerActions}>
-          <TouchableOpacity style={s.actionBtn} onPress={() => { setViewMode(v => v === 'list' ? 'grid' : 'list'); Haptics.selectionAsync(); }}>
+          <TouchableOpacity style={s.actionBtn} onPress={() => { setViewMode(v => v === 'list' ? 'grid' : 'list'); haptic.select(); }}>
             <MaterialCommunityIcons name={viewMode === 'list' ? 'view-grid-outline' : 'view-list-outline'} size={20} color={colors.text} />
           </TouchableOpacity>
           <TouchableOpacity
@@ -85,7 +85,7 @@ export default function NotebookDetailScreen() {
           <TouchableOpacity
             key={s2}
             style={[s.sortBtn, sortBy === s2 && s.sortBtnActive]}
-            onPress={() => { setSortBy(s2); Haptics.selectionAsync(); }}
+            onPress={() => { setSortBy(s2); haptic.select(); }}
           >
             <Text style={[s.sortText, sortBy === s2 && { color: colors.primary }]}>
               {s2 === 'modified' ? 'Recent' : s2 === 'created' ? 'Oldest' : 'A–Z'}

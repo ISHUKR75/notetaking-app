@@ -1,0 +1,3 @@
+- [Haptics web fix](haptics-web.md) — never import expo-haptics directly; use `src/utils/haptics.ts` wrapper that no-ops on web
+- [Note editor architecture](note-editor.md) — [id].tsx has Edit/Preview/Draw modes; markdown preview uses custom native renderer; focus mode hides all chrome
+- [Storage keys](storage-keys.md) — `STORAGE_KEYS.STROKES` is a function `(noteId) => string`, not a plain string key

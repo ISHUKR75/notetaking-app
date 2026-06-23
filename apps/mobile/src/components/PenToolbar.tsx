@@ -10,7 +10,7 @@ import { useTheme } from '../context/ThemeContext';
 import { PEN_TOOLS, PenToolType, DEFAULT_PEN_COLORS } from '../constants/penTools';
 import { TEMPLATES } from '../constants/templates';
 import { Colors } from '../constants/colors';
-import * as Haptics from 'expo-haptics';
+import { haptic } from '../utils/haptics';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -41,12 +41,12 @@ export function PenToolbar({ onUndo, onRedo, canUndo, canRedo, onClear, onClose 
   const s = styles(colors);
 
   const handleToolPress = (toolId: PenToolType) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptic.light();
     setActiveTool(toolId);
   };
 
   const handleColorPress = (color: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptic.light();
     setPenColor(color);
     setShowColorPicker(false);
   };
@@ -88,10 +88,10 @@ export function PenToolbar({ onUndo, onRedo, canUndo, canRedo, onClear, onClose 
             <View style={[s.widthPreview, { height: Math.min(penWidth * 2, 12), backgroundColor: penColor }]} />
           </TouchableOpacity>
           <View style={s.divider} />
-          <TouchableOpacity style={[s.toolBtn, !canUndo && s.disabled]} onPress={() => { Haptics.selectionAsync(); undo(); }}>
+          <TouchableOpacity style={[s.toolBtn, !canUndo && s.disabled]} onPress={() => { haptic.select(); undo(); }}>
             <MaterialCommunityIcons name="undo" size={20} color={canUndo ? colors.text : colors.textMuted} />
           </TouchableOpacity>
-          <TouchableOpacity style={[s.toolBtn, !canRedo && s.disabled]} onPress={() => { Haptics.selectionAsync(); redo(); }}>
+          <TouchableOpacity style={[s.toolBtn, !canRedo && s.disabled]} onPress={() => { haptic.select(); redo(); }}>
             <MaterialCommunityIcons name="redo" size={20} color={canRedo ? colors.text : colors.textMuted} />
           </TouchableOpacity>
           <TouchableOpacity style={s.toolBtn} onPress={() => setShowTemplates(true)}>
@@ -118,7 +118,7 @@ export function PenToolbar({ onUndo, onRedo, canUndo, canRedo, onClear, onClose 
               <TouchableOpacity
                 key={w}
                 style={[s.widthBtn, penWidth === w && s.widthBtnActive]}
-                onPress={() => { setPenWidth(w); Haptics.selectionAsync(); }}
+                onPress={() => { setPenWidth(w); haptic.select(); }}
               >
                 <View style={[s.widthDot, { width: Math.min(w * 2, 24), height: Math.min(w * 2, 24), backgroundColor: penColor }]} />
               </TouchableOpacity>
@@ -130,7 +130,7 @@ export function PenToolbar({ onUndo, onRedo, canUndo, canRedo, onClear, onClose 
               <TouchableOpacity
                 key={o}
                 style={[s.widthBtn, penOpacity === o && s.widthBtnActive]}
-                onPress={() => { setPenOpacity(o); Haptics.selectionAsync(); }}
+                onPress={() => { setPenOpacity(o); haptic.select(); }}
               >
                 <View style={[s.opacityDot, { backgroundColor: penColor, opacity: o }]} />
               </TouchableOpacity>
@@ -163,7 +163,7 @@ export function PenToolbar({ onUndo, onRedo, canUndo, canRedo, onClear, onClose 
                 <TouchableOpacity
                   key={t.id}
                   style={[s.templateBtn, selectedTemplate === t.id && s.templateBtnActive, { borderColor: t.color }]}
-                  onPress={() => { setSelectedTemplate(t.id); setShowTemplates(false); Haptics.selectionAsync(); }}
+                  onPress={() => { setSelectedTemplate(t.id); setShowTemplates(false); haptic.select(); }}
                 >
                   <MaterialCommunityIcons name={t.icon as any} size={28} color={t.color} />
                   <Text style={[s.templateName, { color: colors.text }]}>{t.name}</Text>

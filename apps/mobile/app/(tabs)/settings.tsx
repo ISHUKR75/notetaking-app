@@ -4,8 +4,9 @@ import {
   Switch, Platform, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import { haptic } from '../../src/utils/haptics';
 import { useTheme } from '../../src/context/ThemeContext';
 import { useNotes } from '../../src/context/NotesContext';
 import { Colors } from '../../src/constants/colors';
@@ -63,6 +64,7 @@ const sectionStyles = (colors: typeof Colors.light) => StyleSheet.create({
 });
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const { colors, settings, updateSettings, isDark } = useTheme();
   const { notes, getTrashedNotes } = useNotes();
   const insets = useSafeAreaInsets();
@@ -102,7 +104,7 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 key={opt.id}
                 style={[s.themeBtn, settings.theme === opt.id && s.themeBtnActive]}
-                onPress={() => { updateSettings({ theme: opt.id }); Haptics.selectionAsync(); }}
+                onPress={() => { updateSettings({ theme: opt.id }); haptic.select(); }}
               >
                 <MaterialCommunityIcons
                   name={opt.icon as any}
@@ -228,7 +230,7 @@ export default function SettingsScreen() {
             iconColor="#f97316"
             title="Recently Deleted"
             subtitle={`${getTrashedNotes().length} notes`}
-            onPress={() => Alert.alert('Trash', 'View and restore recently deleted notes. Notes are permanently deleted after 30 days.')}
+            onPress={() => router.push('/notes/trash')}
           />
           <SettingsItem
             icon="export-variant"

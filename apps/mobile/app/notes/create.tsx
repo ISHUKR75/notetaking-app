@@ -7,7 +7,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import { haptic } from '../../src/utils/haptics';
 import { useTheme } from '../../src/context/ThemeContext';
 import { useNotes, NoteColor } from '../../src/context/NotesContext';
 import { Colors } from '../../src/constants/colors';
@@ -53,7 +53,7 @@ export default function CreateNoteScreen() {
   const handleCreate = async () => {
     if (isCreating) return;
     setIsCreating(true);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    haptic.success();
     try {
       const note = await createNote({
         title: title.trim() || 'Untitled Note',
@@ -134,7 +134,7 @@ export default function CreateNoteScreen() {
               <TouchableOpacity
                 key={type.id}
                 style={[s.typeCard, noteType === type.id && s.typeCardActive]}
-                onPress={() => { setNoteType(type.id as any); Haptics.selectionAsync(); }}
+                onPress={() => { setNoteType(type.id as any); haptic.select(); }}
               >
                 <MaterialCommunityIcons
                   name={type.icon as any}
@@ -172,7 +172,7 @@ export default function CreateNoteScreen() {
                 <TouchableOpacity
                   key={t.id}
                   style={[s.templateBtn, selectedTemplate === t.id && s.templateBtnActive, { borderColor: t.color }]}
-                  onPress={() => { setSelectedTemplate(t.id); Haptics.selectionAsync(); }}
+                  onPress={() => { setSelectedTemplate(t.id); haptic.select(); }}
                 >
                   <MaterialCommunityIcons name={t.icon as any} size={22} color={t.color} />
                   <Text style={[s.templateLabel, { color: colors.textSecondary }]}>{t.name}</Text>
@@ -204,7 +204,7 @@ export default function CreateNoteScreen() {
                   { backgroundColor: nc.id === 'none' ? colors.inputBg : (isDark ? nc.darkHex : nc.hex) },
                   selectedColor === nc.id && s.colorDotActive,
                 ]}
-                onPress={() => { setSelectedColor(nc.id); Haptics.selectionAsync(); }}
+                onPress={() => { setSelectedColor(nc.id); haptic.select(); }}
               >
                 {nc.id === 'none' && <MaterialCommunityIcons name="close-circle-outline" size={14} color={colors.textMuted} />}
               </TouchableOpacity>
@@ -257,7 +257,7 @@ export default function CreateNoteScreen() {
                 <MaterialCommunityIcons name="close" size={20} color={colors.textMuted} />
               </TouchableOpacity>
               {EMOJI_OPTIONS.map(e => (
-                <TouchableOpacity key={e} style={s.emojiOption} onPress={() => { setSelectedEmoji(e); setShowEmojiPicker(false); Haptics.selectionAsync(); }}>
+                <TouchableOpacity key={e} style={s.emojiOption} onPress={() => { setSelectedEmoji(e); setShowEmojiPicker(false); haptic.select(); }}>
                   <Text style={s.emojiOptionText}>{e}</Text>
                 </TouchableOpacity>
               ))}
